@@ -1,67 +1,85 @@
-WebSocket = require('ws')
-winston = require('winston')
+Bacon = require 'baconjs'
 http = require('http')
 net = require('net')
 carrier = require('carrier')
 ads = require('ads')
-c = require('c-struct')
-iecstruct = require('iecstruct')
-uint8 = require('uint8')
+#c = require('c-struct')
+#iecstruct = require('iecstruct')
+#uint8 = require('uint8')
+async = require('async')
 
 
-#mb = require('modbus').create()
-#modbus = require('modbus-tcp')
 
-winston.remove(winston.transports.Console)
-winston.add(winston.transports.Console, { timestamp: ( -> new Date() ) })
-console.log = winston.info
+houmioBridge = process.env.HOUMIO_BRIDGE || "localhost:3001"
+bridgeDaliSocket = new net.Socket()
+bridgeDmxSocket = new net.Socket()
 
-houmioServer = process.env.HORSELIGHTS_SERVER || "ws://localhost:3000"
-houmioSitekey = process.env.HORSELIGHTS_SITEKEY || "devsite"
-houmioBeckhoffIp = process.env.HORSELIGHTS_BECKHOFF_IP || "192.168.1.101"
 
-console.log "Using HORSELIGHTS_SERVER=#{houmioServer}"
-console.log "Using HORSELIGHTS_SITEKEY=#{houmioSitekey}"
+houmioBeckhoffIp = process.env.HORSELIGHTS_BECKHOFF_IP || "192.168.1.102"
+
+
 console.log "Using HORSELIGHTS_BECKHOFF_IP=#{houmioBeckhoffIp}"
 
-exit = (msg) ->
-  console.log msg
-  process.exit 1
-
-socket = null
-pingId = null
 adsClient = null
 
-onSocketOpen = ->
-  console.log "Connected to #{houmioServer}"
-  pingId = setInterval ( -> socket.ping(null, {}, false) ), 3000
-  publish = JSON.stringify { command: "publish", data: { sitekey: houmioSitekey, vendor: "beckhoff" } }
-  socket.send(publish)
-  console.log "Sent message:", publish
+isWriteMessage = (message) -> message.command is "write"
 
-onSocketClose = ->
-  clearInterval pingId
-  exit "Disconnected from #{houmioServer}"
+
+bridgeMessagesToAds = (bridgeStream) ->
+  bridgeStream
+    .filter isWriteMessage
+    .bufferingThrottle 10
+    .onValue (message) ->
+      console.log "<-- Data To AMS:", message
+
+
+
+
+toLines = (socket) ->
+  Bacon.fromBinder (sink) ->
+    carrier.carry socket, sink
+    socket.on "close", -> sink new Bacon.End()
+    socket.on "error", (err) -> sink new Bacon.Error(err)
+    ( -> )
+
+
+openBridgeMessageStream = (socket) -> (cb) ->
+  socket.connect houmioBridge.split(":")[1], houmioBridge.split(":")[0], ->
+    lineStream = toLines socket
+    messageStream = lineStream.map JSON.parse
+    cb null, messageStream
+
+openStreams = [ openBridgeMessageStream(bridgeDaliSocket), openBridgeMessageStream(bridgeDmxSocket) ]
+###
+async.series openStreams, (err, [bridgeDaliStream, bridgeDmxStream]) ->
+  if err then exit err
+  bridgeDaliStream.onEnd -> exit "Bridge Dali stream ended"
+  bridgeDmxStream.onEnd -> exit "Bridge DMX stream ended"
+  bridgeDaliStream.onError (err) -> exit "Error from bridge Dali stream:", err
+  bridgeDmxStream.onError (err) -> exit "Error from bridge DMX stream:", err
+  bridgeMessagesToAds bridgeDaliStream
+  bridgeMessagesToAds bridgeDmxStream
+  console.log "TAALLA"
+  #bridgeMessagesToSerial bridgeStream, enoceanSerial
+  #enoceanMessagesToSocket enoceanStream, bridgeSocket
+  bridgeDaliSocket.write (JSON.stringify { command: "driverReady", protocol: "beckhoff/dali"}) + "\n"
+  bridgeDmxSocket.write (JSON.stringify { command: "driverReady", protocol: "beckhoff"}) + "\n"
+###
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 ###
-testHandle = {
-  symname: 'BOX 3 (BK1250).TERM 5 (KL2641).CHANNEL 1.OUTPUT',
-  bytelength: ads.BI000000000,
-  value: 0
-}
-###
-
-
-
-writeToDali = (msg) ->
-
-
-
-
-
-
-
 
 onSocketMessage = (s) ->
   msg = JSON.parse s
@@ -100,15 +118,16 @@ onSocketMessage = (s) ->
       console.log error
 
 
-transmitToServer = (data) ->
-	socket.send JSON.stringify { command: "generaldata", data: data }
+###
 
-socketPong = () ->
-	socket.pong()
+
+
+
+#Beckhoff AMS connection
 
 beckhoffOptions = {
   #The IP or hostname of the target machine
-  host: "192.168.1.102",
+  host: houmioBeckhoffIp,
   #The NetId of the target machine
   amsNetIdTarget: "5.21.69.109.1.1",
   #amsNetIdTarget: "5.21.69.109.3.4",
@@ -117,24 +136,60 @@ beckhoffOptions = {
   #but on the target machine this must be added as a route.
   amsNetIdSource: "192.168.1.103.1.1",
   amsPortTarget: 801
-
   #amsPortTarget: 27906
 }
 
 
+
+adsClient = ads.connect beckhoffOptions, ->
+  console.log "Connected to Beckhoff ADS server"
+
+  this.getSymbols (err, result) ->
+    console.log "ERROR: ", err
+    console.log "symbols", result
+
+###
+  dataHandle = {
+    symname: '.HMI_DmxProcData[4]',
+    bytelength: ads.BYTE,
+    propname: 'value',
+    value: 0xFF
+  }
+
+  this.write dataHandle, (err) ->
+    console.log "WRITE ERR", err
+###
+
+adsClient.on 'error', (err) ->
+  console.log "ERROR", err
+
+
+
+
+
+
+
+
+
+
+
+#OLD STUFFF
+###
 notificationHandle = {
   symname: 'TERM 2 (EL6851).DMX CHANNEL 1-64',
   bytelength: ads.INT,
   transmissionMode: ads.NOTIFY.ONCHANGE
 }
-
-
+###
+###
 writeStartHandle = {
   symname: 'FastTask.bStart',
   bytelength: ads.BOOL,
   value: 1
 
 }
+###
+
 ###
 TYPE DALI_HMI_CTRL:
     (
@@ -146,12 +201,12 @@ END_TYPE
 DALI_HMI_CTRL test
 ###
 
-
+###
 daliData = new c.Schema {
   bStart: c.type.uint8,
   pwrLevel: c.type.uint8
 }
-
+###
 
 ###
 tempVal = new iecstruct.ENUM {
@@ -167,64 +222,21 @@ console.log "VALVAL ", tenp
 
 
 #console.log "ARRAY ", array
-
+###
 testHandle = {
   symname: '.HMI_LightControls[0]',
   bytelength: 2,
   propname: 'array'
 }
+###
 
-
-
-adsClient = ads.connect beckhoffOptions, ->
-  console.log "Connected to Beckhoff ADS server"
-
-
-  #this.notify notificationHandle
-
-
-
-
-  socket = new WebSocket(houmioServer)
-  socket.on 'open', onSocketOpen
-  socket.on 'close', onSocketClose
-  socket.on 'error', exit
-  socket.on 'ping', socketPong
-  socket.on 'message', onSocketMessage
-
-
-  dataHandle = {
-    symname: '.HMI_DmxProcData[4]',
-    bytelength: ads.BYTE,
-    propname: 'value',
-    value: 0xFF
-  }
-
-  this.write dataHandle, (err) ->
-    console.log "WRITE ERR", err
-
-
-
-adsClient.on 'error', (err) ->
-  console.log "ERROR", err
-
-adsClient.on 'notification', (handle) ->
-  console.log "Beckhoff notification", handle.value
-
-
-process.on 'exit', () ->
-  console.log 'exit'
-
-process.on 'SIGINT', ->
-  client.end () ->
-    prcess.exit
-
-
-
-
-
-
-
+###
+testHandle = {
+  symname: 'BOX 3 (BK1250).TERM 5 (KL2641).CHANNEL 1.OUTPUT',
+  bytelength: ads.BI000000000,
+  value: 0
+}
+###
 
 
 
