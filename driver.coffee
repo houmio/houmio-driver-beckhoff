@@ -53,6 +53,16 @@ testHandle = {
 ###
 
 
+
+writeToDali = (msg) ->
+
+
+
+
+
+
+
+
 onSocketMessage = (s) ->
   msg = JSON.parse s
   console.log s
@@ -182,28 +192,18 @@ adsClient = ads.connect beckhoffOptions, ->
   socket.on 'ping', socketPong
   socket.on 'message', onSocketMessage
 
-  #this.write testHandle, (err) ->
-  #  console.log "WRITE ERR ", err
+
   dataHandle = {
-    symname: '.HMI_DmxProcData[1]',
+    symname: '.HMI_DmxProcData[4]',
     bytelength: ads.BYTE,
     propname: 'value',
-    value: 0x00
+    value: 0xFF
   }
 
   this.write dataHandle, (err) ->
     console.log "WRITE ERR", err
 
 
-  #this.read testHandle, (err, handle) ->
-  #  console.log "ERROR", err
-
-  #  data = uint8.bufferToUint8 handle.array
-  #  console.log "READ DATA: ", data[0], data[1]
-  #this.readDeviceInfo (err, result) ->
-  #  console.log "Device Info ", result
-  #this.getSymbols (err, result) ->
-  #  console.log "Symbols ", result
 
 adsClient.on 'error', (err) ->
   console.log "ERROR", err
