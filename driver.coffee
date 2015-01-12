@@ -22,14 +22,78 @@ console.log "Using HORSELIGHTS_BECKHOFF_IP=#{houmioBeckhoffIp}"
 
 adsClient = null
 
+#Beckhoff AMS connection
+
+beckhoffOptions = {
+  #The IP or hostname of the target machine
+  host: houmioBeckhoffIp,
+  #The NetId of the target machine
+  amsNetIdTarget: "5.21.69.109.1.1",
+  #amsNetIdTarget: "5.21.69.109.3.4",
+  #The NetId of the source machine.
+  #You can choose anything in the form of x.x.x.x.x.x,
+  #but on the target machine this must be added as a route.
+  amsNetIdSource: "192.168.1.103.1.1",
+  amsPortTarget: 801
+  #amsPortTarget: 27906
+}
+
+
+
+adsClient = ads.connect beckhoffOptions, ->
+  console.log "Connected to Beckhoff ADS server"
+
+  this.getSymbols (err, result) ->
+    console.log "ERROR: ", err
+    console.log "symbols", result
+
+###
+  dataHandle = {
+    symname: '.HMI_DmxProcData[4]',
+    bytelength: ads.BYTE,
+    propname: 'value',
+    value: 0xFF
+  }
+
+  this.write dataHandle, (err) ->
+    console.log "WRITE ERR", err
+###
+
+adsClient.on 'error', (err) ->
+  console.log "ERROR", err
+
+
+
+
+
+
 isWriteMessage = (message) -> message.command is "write"
 
 
-bridgeMessagesToAds = (bridgeStream) ->
+
+sendDaliMessageToAds = (message) ->
+  #msg = JSON.parse message
+  console.log "MESSAGE DALI", message
+
+sendDmxMessageToAds = (message) ->
+  console.log "MESSAGE DMX", message
+  dataHandle = {
+    symname: '.HMI_DmxProcData[4]',
+    bytelength: ads.BYTE,
+    propname: 'value',
+    value: message.data.bri
+  }
+  if adsClient
+    adsClient.write dataHandle, (err) ->
+      console.log "WRITE ERR", err
+
+bridgeMessagesToAds = (bridgeStream, sendMessageToAds) ->
+  console.log "TAALLA TAAS!!!"
   bridgeStream
     .filter isWriteMessage
     .bufferingThrottle 10
     .onValue (message) ->
+      sendMessageToAds message
       console.log "<-- Data To AMS:", message
 
 
@@ -50,21 +114,21 @@ openBridgeMessageStream = (socket) -> (cb) ->
     cb null, messageStream
 
 openStreams = [ openBridgeMessageStream(bridgeDaliSocket), openBridgeMessageStream(bridgeDmxSocket) ]
-###
+
 async.series openStreams, (err, [bridgeDaliStream, bridgeDmxStream]) ->
   if err then exit err
   bridgeDaliStream.onEnd -> exit "Bridge Dali stream ended"
   bridgeDmxStream.onEnd -> exit "Bridge DMX stream ended"
   bridgeDaliStream.onError (err) -> exit "Error from bridge Dali stream:", err
   bridgeDmxStream.onError (err) -> exit "Error from bridge DMX stream:", err
-  bridgeMessagesToAds bridgeDaliStream
-  bridgeMessagesToAds bridgeDmxStream
+  bridgeMessagesToAds bridgeDaliStream, sendDaliMessageToAds
+  bridgeMessagesToAds bridgeDmxStream, sendDmxMessageToAds
   console.log "TAALLA"
   #bridgeMessagesToSerial bridgeStream, enoceanSerial
   #enoceanMessagesToSocket enoceanStream, bridgeSocket
   bridgeDaliSocket.write (JSON.stringify { command: "driverReady", protocol: "beckhoff/dali"}) + "\n"
   bridgeDmxSocket.write (JSON.stringify { command: "driverReady", protocol: "beckhoff"}) + "\n"
-###
+
 
 
 
