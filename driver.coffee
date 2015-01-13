@@ -15,7 +15,7 @@ bridgeDaliSocket = new net.Socket()
 bridgeDmxSocket = new net.Socket()
 
 
-houmioBeckhoffIp = process.env.HORSELIGHTS_BECKHOFF_IP || "192.168.1.102"
+houmioBeckhoffIp = process.env.HORSELIGHTS_BECKHOFF_IP || "192.168.1.104"
 
 
 console.log "Using HORSELIGHTS_BECKHOFF_IP=#{houmioBeckhoffIp}"
@@ -38,8 +38,6 @@ beckhoffOptions = {
   #amsPortTarget: 27906
 }
 
-
-
 adsClient = ads.connect beckhoffOptions, ->
   console.log "Connected to Beckhoff ADS server"
 
@@ -47,42 +45,26 @@ adsClient = ads.connect beckhoffOptions, ->
     console.log "ERROR: ", err
     console.log "symbols", result
 
-###
-  dataHandle = {
-    symname: '.HMI_DmxProcData[4]',
-    bytelength: ads.BYTE,
-    propname: 'value',
-    value: 0xFF
-  }
-
-  this.write dataHandle, (err) ->
-    console.log "WRITE ERR", err
-###
-
 adsClient.on 'error', (err) ->
   console.log "ERROR", err
 
 
-
-
-
+#Socket IO
 
 isWriteMessage = (message) -> message.command is "write"
-
-
 
 sendDaliMessageToAds = (message) ->
   #msg = JSON.parse message
   console.log "MESSAGE DALI", message
 
 sendDmxMessageToAds = (message) ->
-  console.log "MESSAGE DMX", message
   dataHandle = {
-    symname: '.HMI_DmxProcData[4]',
+    symname: ".HMI_DmxProcData[#{message.data.protocolAddress}]",
     bytelength: ads.BYTE,
     propname: 'value',
     value: message.data.bri
   }
+  console.log dataHandle.symname
   if adsClient
     adsClient.write dataHandle, (err) ->
       console.log "WRITE ERR", err
@@ -94,10 +76,7 @@ bridgeMessagesToAds = (bridgeStream, sendMessageToAds) ->
     .bufferingThrottle 10
     .onValue (message) ->
       sendMessageToAds message
-      console.log "<-- Data To AMS:", message
-
-
-
+      console.log "<-- Data To ADS:", message
 
 toLines = (socket) ->
   Bacon.fromBinder (sink) ->
@@ -127,7 +106,7 @@ async.series openStreams, (err, [bridgeDaliStream, bridgeDmxStream]) ->
   #bridgeMessagesToSerial bridgeStream, enoceanSerial
   #enoceanMessagesToSocket enoceanStream, bridgeSocket
   bridgeDaliSocket.write (JSON.stringify { command: "driverReady", protocol: "beckhoff/dali"}) + "\n"
-  bridgeDmxSocket.write (JSON.stringify { command: "driverReady", protocol: "beckhoff"}) + "\n"
+  bridgeDmxSocket.write (JSON.stringify { command: "driverReady", protocol: "beckhoff/dmx"}) + "\n"
 
 
 
@@ -185,47 +164,6 @@ onSocketMessage = (s) ->
 ###
 
 
-
-
-#Beckhoff AMS connection
-
-beckhoffOptions = {
-  #The IP or hostname of the target machine
-  host: houmioBeckhoffIp,
-  #The NetId of the target machine
-  amsNetIdTarget: "5.21.69.109.1.1",
-  #amsNetIdTarget: "5.21.69.109.3.4",
-  #The NetId of the source machine.
-  #You can choose anything in the form of x.x.x.x.x.x,
-  #but on the target machine this must be added as a route.
-  amsNetIdSource: "192.168.1.103.1.1",
-  amsPortTarget: 801
-  #amsPortTarget: 27906
-}
-
-
-
-adsClient = ads.connect beckhoffOptions, ->
-  console.log "Connected to Beckhoff ADS server"
-
-  this.getSymbols (err, result) ->
-    console.log "ERROR: ", err
-    console.log "symbols", result
-
-###
-  dataHandle = {
-    symname: '.HMI_DmxProcData[4]',
-    bytelength: ads.BYTE,
-    propname: 'value',
-    value: 0xFF
-  }
-
-  this.write dataHandle, (err) ->
-    console.log "WRITE ERR", err
-###
-
-adsClient.on 'error', (err) ->
-  console.log "ERROR", err
 
 
 
