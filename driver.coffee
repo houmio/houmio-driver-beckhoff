@@ -3,9 +3,6 @@ http = require('http')
 net = require('net')
 carrier = require('carrier')
 ads = require('ads')
-#c = require('c-struct')
-#iecstruct = require('iecstruct')
-#uint8 = require('uint8')
 async = require('async')
 
 
@@ -54,8 +51,29 @@ adsClient.on 'error', (err) ->
 isWriteMessage = (message) -> message.command is "write"
 
 sendDaliMessageToAds = (message) ->
-  #msg = JSON.parse message
+
   console.log "MESSAGE DALI", message
+  if message.data.bri is 255 then message.data.bri = 254
+
+  #powerLevel = new iecstruct.ARRAY iecstruct.BYTE, 2
+  #powerLevel[0] = 0x01
+  #powerLevel[1] = 0x01
+
+  dataHandle = {
+    symname: ".HMI_LightControls[#{message.data.protocolAddress}]",
+    bytelength: 2,
+    propname: 'value',
+    value: new Buffer [0x01, message.data.bri]
+  }
+  #console.log "DATA_HANDLE", dataHandle
+  try
+    adsClient.write dataHandle, (err) ->
+      console.log err
+  catch error
+    console.log error
+
+
+
 
 sendDmxMessageToAds = (message) ->
   dataHandle = {
@@ -70,7 +88,6 @@ sendDmxMessageToAds = (message) ->
       console.log "WRITE ERR", err
 
 bridgeMessagesToAds = (bridgeStream, sendMessageToAds) ->
-  console.log "TAALLA TAAS!!!"
   bridgeStream
     .filter isWriteMessage
     .bufferingThrottle 10
@@ -122,46 +139,6 @@ async.series openStreams, (err, [bridgeDaliStream, bridgeDmxStream]) ->
 
 
 
-###
-
-onSocketMessage = (s) ->
-  msg = JSON.parse s
-  console.log s
-  if msg.data.type == "binary"
-    console.log "MESSAGE: ", msg
-    data = {
-      symname: msg.data.devaddr,
-      bytelength: ads.BIT,
-      value: msg.data.on
-    }
-    adsClient.write data, (err) ->
-      console.log "Written data"
-  else
-    console.log "MESSAGE: ", msg
-    if msg.data.bri is 255 then msg.data.bri = 254
-    #powerLevel: c.type.u16
-    #powerLevel = 0x0001 | msg.data.bri << 8
-    #console.log "BRI ", powerLevel.toString 16, ads.INT
-
-    powerLevel = new iecstruct.ARRAY iecstruct.BYTE, 2
-    powerLevel[0] = 0x01
-    powerLevel[1] = 0x01
-
-    dataHandle = {
-      symname: msg.data.devaddr,
-      bytelength: 2,
-      propname: 'value',
-      value: new Buffer [0x01, msg.data.bri]
-    }
-    #console.log "DATA_HANDLE", dataHandle
-    try
-      adsClient.write dataHandle, (err) ->
-        console.log err
-    catch error
-      console.log error
-
-
-###
 
 
 
@@ -173,16 +150,6 @@ onSocketMessage = (s) ->
 
 
 
-
-
-#OLD STUFFF
-###
-notificationHandle = {
-  symname: 'TERM 2 (EL6851).DMX CHANNEL 1-64',
-  bytelength: ads.INT,
-  transmissionMode: ads.NOTIFY.ONCHANGE
-}
-###
 ###
 writeStartHandle = {
   symname: 'FastTask.bStart',
