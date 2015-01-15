@@ -107,7 +107,9 @@ openBridgeMessageStream = (socket) -> (cb) ->
 openStreams = [ openBridgeMessageStream(bridgeDaliSocket), openBridgeMessageStream(bridgeDmxSocket) ]
 
 async.series openStreams, (err, [bridgeDaliStream, bridgeDmxStream]) ->
-  if err then exit err
+  if err
+    console.log "Error:", err
+    process.exit 1
   bridgeDaliStream.onEnd -> exit "Bridge Dali stream ended"
   bridgeDmxStream.onEnd -> exit "Bridge DMX stream ended"
   bridgeDaliStream.onError (err) -> exit "Error from bridge Dali stream:", err
