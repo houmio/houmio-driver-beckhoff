@@ -43,7 +43,8 @@ adsClient = ads.connect beckhoffOptions, ->
     console.log "symbols", result
 
 adsClient.on 'error', (err) ->
-  console.log "ERROR", err
+  console.log "ADS ERROR", err
+  process.exit 1
 
 
 #Socket IO
@@ -51,13 +52,7 @@ adsClient.on 'error', (err) ->
 isWriteMessage = (message) -> message.command is "write"
 
 sendDaliMessageToAds = (message) ->
-
-  console.log "MESSAGE DALI", message
   if message.data.bri is 255 then message.data.bri = 254
-
-  #powerLevel = new iecstruct.ARRAY iecstruct.BYTE, 2
-  #powerLevel[0] = 0x01
-  #powerLevel[1] = 0x01
 
   dataHandle = {
     symname: ".HMI_LightControls[#{message.data.protocolAddress}]",
@@ -65,7 +60,7 @@ sendDaliMessageToAds = (message) ->
     propname: 'value',
     value: new Buffer [0x01, message.data.bri]
   }
-  #console.log "DATA_HANDLE", dataHandle
+
   try
     adsClient.write dataHandle, (err) ->
       console.log err
@@ -119,7 +114,6 @@ async.series openStreams, (err, [bridgeDaliStream, bridgeDmxStream]) ->
   bridgeDmxStream.onError (err) -> exit "Error from bridge DMX stream:", err
   bridgeMessagesToAds bridgeDaliStream, sendDaliMessageToAds
   bridgeMessagesToAds bridgeDmxStream, sendDmxMessageToAds
-  console.log "TAALLA"
   #bridgeMessagesToSerial bridgeStream, enoceanSerial
   #enoceanMessagesToSocket enoceanStream, bridgeSocket
   bridgeDaliSocket.write (JSON.stringify { command: "driverReady", protocol: "beckhoff/dali"}) + "\n"
