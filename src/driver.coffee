@@ -10,46 +10,44 @@ async = require('async')
 houmioBridge = process.env.HOUMIO_BRIDGE || "localhost:3001"
 bridgeDaliSocket = new net.Socket()
 bridgeDmxSocket = new net.Socket()
+bridgeAcSocket = new net.Socket()
 
 
-houmioBeckhoffIp = process.env.HORSELIGHTS_BECKHOFF_IP || "192.168.1.104"
-
+houmioBeckhoffIp = process.env.HOUMIO_BECKHOFF_IP || "192.168.1.104"
+houmioAmsSourceId = process.env.HOUMIO_BECKHOFF_AMS_SOURCE_ID || "192.168.1.103.1.1"
 
 console.log "Using HORSELIGHTS_BECKHOFF_IP=#{houmioBeckhoffIp}"
 
 adsClient = null
 
-#Beckhoff AMS connection
+#ADS Messages
 
-beckhoffOptions = {
-  #The IP or hostname of the target machine
-  host: houmioBeckhoffIp,
-  #The NetId of the target machine
-  amsNetIdTarget: "5.21.69.109.1.1",
-  #amsNetIdTarget: "5.21.69.109.3.4",
-  #The NetId of the source machine.
-  #You can choose anything in the form of x.x.x.x.x.x,
-  #but on the target machine this must be added as a route.
-  amsNetIdSource: "192.168.1.103.1.1",
-  amsPortTarget: 801
-  #amsPortTarget: 27906
-}
+sendAcMessageToAds = (message) ->
+  #console.log "AC Message", message
+  if message.data.type is 'binary'
+    if message.data.on is true then onOff = 1 else onOff = 0
+    dataHandle = {
+      symname: ".HMI_RelayControls[#{message.data.protocolAddress}]",
+      bytelength: ads.BYTE,
+      value: onOff
+    }
+    try
+      adsClient.write dataHandle, (err) ->
+        if err then console.log "AC Relay Write Error", err
+    catch error
+      console.log "General AC Relay Write Error", error
+  else
+    dataHandle = {
+      symname: ".HMI_DimmerControls[#{message.data.protocolAddress}]"
+      bytelength: ads.INT,
+      value: message.data.bri
+    }
+    try
+      adsClient.write dataHandle, (err) ->
+        if err then console.log "AC Relay Write Error", err
+    catch error
+      console.log "General AC Relay Write Error", error
 
-adsClient = ads.connect beckhoffOptions, ->
-  console.log "Connected to Beckhoff ADS server"
-
-  this.getSymbols (err, result) ->
-    console.log "ERROR: ", err
-    console.log "symbols", result
-
-adsClient.on 'error', (err) ->
-  console.log "ADS ERROR", err
-  process.exit 1
-
-
-#Socket IO
-
-isWriteMessage = (message) -> message.command is "write"
 
 sendDaliMessageToAds = (message) ->
   if message.data.bri is 255 then message.data.bri = 254
@@ -63,16 +61,14 @@ sendDaliMessageToAds = (message) ->
 
   try
     adsClient.write dataHandle, (err) ->
-      console.log err
+      if err then console.log "Dali Write Error", err
   catch error
-    console.log error
-
-
-
+    console.log "General Dali Write Error", error
 
 sendDmxMessageToAds = (message) ->
+  console.log "DMX KULLII"
   dataHandle = {
-    symname: ".HMI_DmxProcData[#{message.data.protocolAddress}]",
+    symname: ".HMI_DMXPROCDATA[#{message.data.protocolAddress}]",
     bytelength: ads.BYTE,
     propname: 'value',
     value: message.data.bri
@@ -80,7 +76,11 @@ sendDmxMessageToAds = (message) ->
   console.log dataHandle.symname
   if adsClient
     adsClient.write dataHandle, (err) ->
-      console.log "WRITE ERR", err
+      if err then console.log "Dmx Write error", err
+
+#Socket IO
+
+isWriteMessage = (message) -> message.command is "write"
 
 bridgeMessagesToAds = (bridgeStream, sendMessageToAds) ->
   bridgeStream
@@ -104,106 +104,51 @@ openBridgeMessageStream = (socket) -> (cb) ->
     messageStream = lineStream.map JSON.parse
     cb null, messageStream
 
-openStreams = [ openBridgeMessageStream(bridgeDaliSocket), openBridgeMessageStream(bridgeDmxSocket) ]
+openStreams = [ openBridgeMessageStream(bridgeDaliSocket), openBridgeMessageStream(bridgeDmxSocket), openBridgeMessageStream(bridgeAcSocket)]
 
-async.series openStreams, (err, [bridgeDaliStream, bridgeDmxStream]) ->
-  if err
-    console.log "Error:", err
-    process.exit 1
+#openStreams = [ openBridgeMessageStream(bridgeDmxSocket) ]
+async.series openStreams, (err, [bridgeDaliStream, bridgeDmxStream, bridgeAcStream]) ->
+  if err then exit err
   bridgeDaliStream.onEnd -> exit "Bridge Dali stream ended"
   bridgeDmxStream.onEnd -> exit "Bridge DMX stream ended"
+  bridgeAcStream.onEnd -> exit "Bridge AC stream ended"
   bridgeDaliStream.onError (err) -> exit "Error from bridge Dali stream:", err
   bridgeDmxStream.onError (err) -> exit "Error from bridge DMX stream:", err
+  bridgeAcStream.onError (err) -> exit "Error from bridge AC stream:", err
   bridgeMessagesToAds bridgeDaliStream, sendDaliMessageToAds
   bridgeMessagesToAds bridgeDmxStream, sendDmxMessageToAds
+  bridgeMessagesToAds bridgeAcStream, sendAcMessageToAds
   #bridgeMessagesToSerial bridgeStream, enoceanSerial
   #enoceanMessagesToSocket enoceanStream, bridgeSocket
   bridgeDaliSocket.write (JSON.stringify { command: "driverReady", protocol: "beckhoff/dali"}) + "\n"
   bridgeDmxSocket.write (JSON.stringify { command: "driverReady", protocol: "beckhoff/dmx"}) + "\n"
+  bridgeAcSocket.write (JSON.stringify { command: "driverReady", protocol: "beckhoff/ac"}) + "\n"
 
 
+#Beckhoff AMS connection
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-###
-writeStartHandle = {
-  symname: 'FastTask.bStart',
-  bytelength: ads.BOOL,
-  value: 1
-
+beckhoffOptions = {
+  #The IP or hostname of the target machine
+  host: houmioBeckhoffIp,
+  #The NetId of the target machine
+  amsNetIdTarget: "5.21.69.109.1.1",
+  #amsNetIdTarget: "5.21.69.109.3.4",
+  #The NetId of the source machine.
+  #You can choose anything in the form of x.x.x.x.x.x,
+  #but on the target machine this must be added as a route.
+  amsNetIdSource: houmioAmsSourceId,
+  amsPortTarget: 801
+  #amsPortTarget: 27906
+  #amsPortTarget: 300
 }
-###
 
-###
-TYPE DALI_HMI_CTRL:
-    (
-        bStart:=false,
-        powerLevel:=0
-    );
-END_TYPE
+adsClient = ads.connect beckhoffOptions, ->
+  console.log "Connected to Beckhoff ADS server"
 
-DALI_HMI_CTRL test
-###
+  this.getSymbols (err, result) ->
+    console.log "ERROR: ", err
+    console.log "symbols", result
 
-###
-daliData = new c.Schema {
-  bStart: c.type.uint8,
-  pwrLevel: c.type.uint8
-}
-###
-
-###
-tempVal = new iecstruct.ENUM {
-  bstart: true,
-  power: 0,
-}
-console.log "TEMP VAL ", tempVal
-console.log "VALVAL ", tenp
-###
-
-#array = new iecstruct.ARRAY iecstruct.BYTE, 2
-
-
-
-#console.log "ARRAY ", array
-###
-testHandle = {
-  symname: '.HMI_LightControls[0]',
-  bytelength: 2,
-  propname: 'array'
-}
-###
-
-###
-testHandle = {
-  symname: 'BOX 3 (BK1250).TERM 5 (KL2641).CHANNEL 1.OUTPUT',
-  bytelength: ads.BI000000000,
-  value: 0
-}
-###
-
-
-
-
-
+adsClient.on 'error', (err) ->
+  console.log "ADS ERROR", err
+  process.exit 1
