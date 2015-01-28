@@ -127,13 +127,10 @@ dmxToAds = (address, value, dmxToAdsCb) ->
 sendDmxMessageToAds = (message) ->
   if message.data.type is 'color'
     console.log message.data
-    rgbw = hsvToRgbw message.data.hue, 255, message.data.bri
-    console.log "RGBW", rgbw
+    rgbw = hsvToRgbw message.data.hue, message.data.saturation, message.data.bri
     index = message.data.protocolAddress
     async.eachSeries rgbw, (val, cb) ->
       dmxToAds index, val, cb
-
-      console.log index, val
       index++
     , (err) ->
       if err then console.log "Dmx Write error", err
