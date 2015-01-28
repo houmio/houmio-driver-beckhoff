@@ -4,6 +4,7 @@ net = require('net')
 carrier = require('carrier')
 ads = require('ads')
 async = require('async')
+_ = require('lodash')
 
 
 
@@ -69,6 +70,28 @@ sendDaliMessageToAds = (message) ->
     console.log "General Dali Write Error", error
 
 
+hsvToRgbw = (hue, saturation, value) ->
+  hue /= 255
+  saturation /= 255
+  value /= 255
+
+  #if (h && s === undefined && v === undefined) {
+  #    s = h.s, v = h.v, h = h.h;
+  #}
+  i = Math.floor(hue * 6)
+  f = hue * 6 - i
+  p = value * (1 - saturation)
+  q = value * (1 - f * saturation)
+  t = value * (1 - (1 - f) * saturation)
+  switch i % 6
+    when 0 then rgb = [value, t, p]
+    when 1 then rgb = [q, value, p]
+    when 2 then rgb = [p, value, t]
+    when 3 then rgb = [p, q, value]
+    when 4 then rgb = [t, p, value]
+    when 5 then rgb = [value, p, q]
+  _.map rgb, (val) -> Math.floor(val*255)
+
 hslToRgbw = (hue, saturation, lightness) ->
 
   if saturation is 0 then return [0, 0, 0, lightness]
@@ -87,11 +110,8 @@ hslToRgbw = (hue, saturation, lightness) ->
   r = hueToRgb p, q, hue + 1/3
   g = hueToRgb p, q, hue
   b = hueToRgb p, q, hue - 1/3
+
   [Math.round(r * 255), Math.round(g * 255), Math.round(b * 255), Math.round(lightness / saturation)]
-
-
-
-
 
 dmxToAds = (address, value, dmxToAdsCb) ->
   dataHandle = {
@@ -100,19 +120,21 @@ dmxToAds = (address, value, dmxToAdsCb) ->
     propname: 'value',
     value: value
   }
-  console.log dataHandle.symname
   if adsClient
     adsClient.write dataHandle, (err) ->
       dmxToAdsCb err
 
 sendDmxMessageToAds = (message) ->
-  console.log "DMX", message
   if message.data.type is 'color'
-    rgbw = hslToRgbw message.data.hue, 128, message.data.bri
+    console.log message.data
+    rgbw = hsvToRgbw message.data.hue, 255, message.data.bri
     console.log "RGBW", rgbw
-    index = 0
+    index = message.data.protocolAddress
     async.eachSeries rgbw, (val, cb) ->
-      dmxToAds message.data.protocolAddress++, val, cb
+      dmxToAds index, val, cb
+
+      console.log index, val
+      index++
     , (err) ->
       if err then console.log "Dmx Write error", err
   else
