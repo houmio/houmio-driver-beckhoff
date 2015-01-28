@@ -71,7 +71,7 @@ sendDaliMessageToAds = (message) ->
 
 hslToRgbw = (hue, saturation, lightness) ->
 
-  if saturation is 0 then return {red: 0, green: 0, blue: 0, white: lightness}
+  if saturation is 0 then return [0, 0, 0, lightness]
   hueToRgb = (p, q, t) ->
     if t < 0 then t += 1
     if t > 1 then t -= 1
@@ -87,28 +87,37 @@ hslToRgbw = (hue, saturation, lightness) ->
   r = hueToRgb p, q, hue + 1/3
   g = hueToRgb p, q, hue
   b = hueToRgb p, q, hue - 1/3
-  {red: Math.round(r * 255), green: Math.round(g * 255), blue: Math.round(b * 255), white: Math.round(lightness / saturation)}
+  [Math.round(r * 255), Math.round(g * 255), Math.round(b * 255), Math.round(lightness / saturation)]
+
+
+
+
+
+dmxToAds = (address, value, dmxToAdsCb) ->
+  dataHandle = {
+    symname: ".HMI_DMXPROCDATA[#{address}]",
+    bytelength: ads.BYTE,
+    propname: 'value',
+    value: value
+  }
+  console.log dataHandle.symname
+  if adsClient
+    adsClient.write dataHandle, (err) ->
+      dmxToAdsCb err
 
 sendDmxMessageToAds = (message) ->
-
   console.log "DMX", message
   if message.data.type is 'color'
     rgbw = hslToRgbw message.data.hue, 128, message.data.bri
     console.log "RGBW", rgbw
-
-
-
+    index = 0
+    async.eachSeries rgbw, (val, cb) ->
+      dmxToAds message.data.protocolAddress++, val, cb
+    , (err) ->
+      if err then console.log "Dmx Write error", err
   else
-    dataHandle = {
-      symname: ".HMI_DMXPROCDATA[#{message.data.protocolAddress}]",
-      bytelength: ads.BYTE,
-      propname: 'value',
-      value: message.data.bri
-    }
-    console.log dataHandle.symname
-    if adsClient
-      adsClient.write dataHandle, (err) ->
-        if err then console.log "Dmx Write error", err
+    dmxToAds message.data.protocolAddress++, message.data.bri, (err) ->
+      if err then console.log "Dmx Write error", err
 
 #Socket IO
 
@@ -177,9 +186,9 @@ beckhoffOptions = {
 adsClient = ads.connect beckhoffOptions, ->
   console.log "Connected to Beckhoff ADS server"
 
-  this.getSymbols (err, result) ->
-    console.log "ERROR: ", err
-    console.log "symbols", result
+  #this.getSymbols (err, result) ->
+  #  console.log "ERROR: ", err
+  #  console.log "symbols", result
 
 adsClient.on 'error', (err) ->
   console.log "ADS ERROR", err
