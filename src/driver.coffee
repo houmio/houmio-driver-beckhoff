@@ -15,8 +15,11 @@ bridgeAcSocket = new net.Socket()
 
 houmioBeckhoffIp = process.env.HOUMIO_BECKHOFF_IP || "192.168.1.104"
 houmioAmsSourceId = process.env.HOUMIO_BECKHOFF_AMS_SOURCE_ID || "192.168.1.103.1.1"
+houmioAmsTargetId = process.env.HOUMIO_BECKHOFF_AMS_TARGET_ID || "5.21.69.109.1.1"
 
-console.log "Using HORSELIGHTS_BECKHOFF_IP=#{houmioBeckhoffIp}"
+console.log "Using HOUMIO_BECKHOFF_IP=#{houmioBeckhoffIp}"
+console.log "Using HOUMIO_BECKHOFF_AMS_SOURCE_ID=#{houmioAmsSourceId}"
+console.log "Using HOUMIO_BECKHOFF_AMS_TARGET_ID=#{houmioAmsTargetId}"
 
 adsClient = null
 
@@ -65,18 +68,47 @@ sendDaliMessageToAds = (message) ->
   catch error
     console.log "General Dali Write Error", error
 
+
+hslToRgbw = (hue, saturation, lightness) ->
+
+  if saturation is 0 then return {red: 0, green: 0, blue: 0, white: lightness}
+  hueToRgb = (p, q, t) ->
+    if t < 0 then t += 1
+    if t > 1 then t -= 1
+    if t < 1/6 then return p + (q - p) * 6 * t
+    if t < 1/2 then return q
+    if t < 2/3 then return p + (q - p) * (2/3 - t) * 6
+    return p
+  lightness /= 255
+  saturation /= 255
+  hue /= 255
+  q = if lightness < 0.5 then lightness * (1 + saturation) else lightness + saturation - lightness * saturation
+  p = 2 * lightness - q
+  r = hueToRgb p, q, hue + 1/3
+  g = hueToRgb p, q, hue
+  b = hueToRgb p, q, hue - 1/3
+  {red: Math.round(r * 255), green: Math.round(g * 255), blue: Math.round(b * 255), white: Math.round(lightness / saturation)}
+
 sendDmxMessageToAds = (message) ->
-  console.log "DMX KULLII"
-  dataHandle = {
-    symname: ".HMI_DMXPROCDATA[#{message.data.protocolAddress}]",
-    bytelength: ads.BYTE,
-    propname: 'value',
-    value: message.data.bri
-  }
-  console.log dataHandle.symname
-  if adsClient
-    adsClient.write dataHandle, (err) ->
-      if err then console.log "Dmx Write error", err
+
+  console.log "DMX", message
+  if message.data.type is 'color'
+    rgbw = hslToRgbw message.data.hue, 128, message.data.bri
+    console.log "RGBW", rgbw
+
+
+
+  else
+    dataHandle = {
+      symname: ".HMI_DMXPROCDATA[#{message.data.protocolAddress}]",
+      bytelength: ads.BYTE,
+      propname: 'value',
+      value: message.data.bri
+    }
+    console.log dataHandle.symname
+    if adsClient
+      adsClient.write dataHandle, (err) ->
+        if err then console.log "Dmx Write error", err
 
 #Socket IO
 
@@ -113,7 +145,7 @@ async.series openStreams, (err, [bridgeDaliStream, bridgeDmxStream, bridgeAcStre
   bridgeDmxStream.onEnd -> exit "Bridge DMX stream ended"
   bridgeAcStream.onEnd -> exit "Bridge AC stream ended"
   bridgeDaliStream.onError (err) -> exit "Error from bridge Dali stream:", err
-  bridgeDmxStream.onError (err) -> exit "Error from bridge DMX stream:", err
+  bridgeDmxStream.onError (err) -> exit "Error from bridge DMX stream:", errß
   bridgeAcStream.onError (err) -> exit "Error from bridge AC stream:", err
   bridgeMessagesToAds bridgeDaliStream, sendDaliMessageToAds
   bridgeMessagesToAds bridgeDmxStream, sendDmxMessageToAds
@@ -131,7 +163,7 @@ beckhoffOptions = {
   #The IP or hostname of the target machine
   host: houmioBeckhoffIp,
   #The NetId of the target machine
-  amsNetIdTarget: "5.21.69.109.1.1",
+  amsNetIdTarget: houmioAmsTargetId,
   #amsNetIdTarget: "5.21.69.109.3.4",
   #The NetId of the source machine.
   #You can choose anything in the form of x.x.x.x.x.x,
