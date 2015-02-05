@@ -53,22 +53,24 @@ sendAcMessageToAds = (message) ->
       console.log "General AC Relay Write Error", error
 
 
-sendDaliMessageToAds = (message) ->
-  if message.data.bri is 255 then message.data.bri = 254
-
+daliToAds = (address, value, daliToAdsCb) ->
   dataHandle = {
-    symname: ".HMI_LightControls[#{message.data.protocolAddress}]",
+    symname: ".HMI_LightControls[#{address}]",
     bytelength: 2,
     propname: 'value',
-    value: new Buffer [0x01, message.data.bri]
+    value: new Buffer [0x01, value]
   }
-
-  try
+  if adsClient
     adsClient.write dataHandle, (err) ->
-      if err then console.log "Dali Write Error", err
-  catch error
-    console.log "General Dali Write Error", error
+      daliToAdsCb err
 
+sendDaliMessageToAds = (message) ->
+  if message.data.bri is 255 then message.data.bri = 254
+  addresses = message.data.protocolAddress.split(",")
+  async.eachSeries addresses, (addr, cb) ->
+      daliToAds addr, message.data.bri, cb
+    , (err) ->
+      if err then console.log "Dali Write error", err
 
 hsvToRgbw = (hue, saturation, value) ->
   hue /= 255
@@ -126,7 +128,6 @@ dmxToAds = (address, value, dmxToAdsCb) ->
 
 sendDmxMessageToAds = (message) ->
   if message.data.type is 'color'
-    console.log message.data
     rgbw = hsvToRgbw message.data.hue, message.data.saturation, message.data.bri
     index = message.data.protocolAddress
     async.eachSeries rgbw, (val, cb) ->
