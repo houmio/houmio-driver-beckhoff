@@ -132,7 +132,7 @@ selectAndSendToDmx = (address, message, cb) ->
       index++
     , cb
   else
-    dmxToAds message.data.protocolAddress, message.data.bri, cb
+    dmxToAds address, message.data.bri, cb
 
 sendDmxMessageToAds = (message) ->
   addresses = message.data.protocolAddress.split(",")
