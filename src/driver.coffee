@@ -6,15 +6,12 @@ ads = require('ads')
 async = require('async')
 _ = require('lodash')
 
-
-
 houmioBridge = process.env.HOUMIO_BRIDGE || "localhost:3001"
 bridgeDaliSocket = new net.Socket()
 bridgeDmxSocket = new net.Socket()
 bridgeAcSocket = new net.Socket()
 
-
-houmioBeckhoffIp = process.env.HOUMIO_BECKHOFF_IP || "192.168.1.104"
+houmioBeckhoffIp = process.env.HOUMIO_BECKHOFF_IP || "192.168.88.43"
 houmioAmsSourceId = process.env.HOUMIO_BECKHOFF_AMS_SOURCE_ID || "192.168.1.103.1.1"
 houmioAmsTargetId = process.env.HOUMIO_BECKHOFF_AMS_TARGET_ID || "5.21.69.109.1.1"
 
@@ -136,7 +133,7 @@ sendDmxMessageToAds = (message) ->
     , (err) ->
       if err then console.log "Dmx Write error", err
   else
-    dmxToAds message.data.protocolAddress++, message.data.bri, (err) ->
+    dmxToAds message.data.protocolAddress, message.data.bri, (err) ->
       if err then console.log "Dmx Write error", err
 
 #Socket IO
@@ -185,6 +182,19 @@ async.series openStreams, (err, [bridgeDaliStream, bridgeDmxStream, bridgeAcStre
   bridgeDmxSocket.write (JSON.stringify { command: "driverReady", protocol: "beckhoff/dmx"}) + "\n"
   bridgeAcSocket.write (JSON.stringify { command: "driverReady", protocol: "beckhoff/ac"}) + "\n"
 
+readCheckDataFromAds = ->
+  resetDevice = ->
+    console.log "ADS TIMEOUT ERROR"
+    process.exit 1
+  dataHandle = {
+    symname: ".SYSTEMSERVICE_TIMESERVICES",
+    bytelength: ads.UDINT,
+    propname: 'value'
+  }
+  errorTimeout = setTimeout resetDevice, 10000
+  adsClient.read dataHandle, (err, handle) ->
+    unless err
+      clearTimeout errorTimeout
 
 #Beckhoff AMS connection
 
@@ -205,7 +215,7 @@ beckhoffOptions = {
 
 adsClient = ads.connect beckhoffOptions, ->
   console.log "Connected to Beckhoff ADS server"
-
+  setInterval readCheckDataFromAds, 1000
   #this.getSymbols (err, result) ->
   #  console.log "ERROR: ", err
   #  console.log "symbols", result
