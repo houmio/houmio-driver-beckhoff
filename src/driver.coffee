@@ -102,8 +102,7 @@ daliToAds = (address, value, daliToAdsCb) ->
     value: new Buffer [0x01, value]
   }
   if adsClient
-    adsClient.write dataHandle, (err) ->
-      daliToAdsCb err
+    adsClient.write dataHandle, daliToAdsCb
 
 sendDaliMessageToAds = (message) ->
   if message.data.bri is 255 then message.data.bri = 254
