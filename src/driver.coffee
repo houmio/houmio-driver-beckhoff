@@ -186,6 +186,4 @@ adsClient = ads.connect beckhoffOptions, ->
   #  console.log "ERROR: ", err
   #  console.log "symbols", result
 
-adsClient.on 'error', (err) ->
-  console.log "ADS ERROR", err
-  process.exit 1
+adsClient.on 'error', exit
