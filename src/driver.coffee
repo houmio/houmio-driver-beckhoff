@@ -11,9 +11,17 @@ bridgeDaliSocket = new net.Socket()
 bridgeDmxSocket = new net.Socket()
 bridgeAcSocket = new net.Socket()
 
-houmioBeckhoffIp = process.env.HOUMIO_BECKHOFF_IP || "192.168.88.43"
-houmioAmsSourceId = process.env.HOUMIO_BECKHOFF_AMS_SOURCE_ID || "192.168.1.103.1.1"
-houmioAmsTargetId = process.env.HOUMIO_BECKHOFF_AMS_TARGET_ID || "5.21.69.109.1.1"
+houmioBeckhoffIp = process.env.HOUMIO_BECKHOFF_IP
+houmioAmsSourceId = process.env.HOUMIO_BECKHOFF_AMS_SOURCE_ID
+houmioAmsTargetId = process.env.HOUMIO_BECKHOFF_AMS_TARGET_ID
+
+exit = (msg) ->
+  console.log msg
+  process.exit 1
+
+unless houmioBeckhoffIp then exit "HOUMIO_BECKHOFF_IP is not set"
+unless houmioAmsSourceId then exit "HOUMIO_BECKHOFF_AMS_SOURCE_ID is not set"
+unless houmioAmsTargetId then exit "HOUMIO_BECKHOFF_AMS_TARGET_ID is not set"
 
 console.log "Using HOUMIO_BECKHOFF_IP=#{houmioBeckhoffIp}"
 console.log "Using HOUMIO_BECKHOFF_AMS_SOURCE_ID=#{houmioAmsSourceId}"
