@@ -149,15 +149,12 @@ async.series openStreams, (err, [bridgeDaliStream, bridgeDmxStream, bridgeAcStre
   bridgeAcSocket.write (JSON.stringify { command: "driverReady", protocol: "beckhoff/ac"}) + "\n"
 
 readCheckDataFromAds = ->
-  resetDevice = ->
-    console.log "ADS TIMEOUT ERROR"
-    process.exit 1
   dataHandle = {
     symname: ".SYSTEMSERVICE_TIMESERVICES",
     bytelength: ads.UDINT,
     propname: 'value'
   }
-  errorTimeout = setTimeout resetDevice, 10000
+  errorTimeout = setTimeout exit, 10000
   adsClient.read dataHandle, (err, handle) ->
     unless err
       clearTimeout errorTimeout
