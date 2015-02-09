@@ -1,3 +1,5 @@
+_ = require('lodash')
+
 hsvToRgbw = (hue, saturation, value) ->
   hue /= 255
   saturation /= 255
