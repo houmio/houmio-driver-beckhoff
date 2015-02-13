@@ -120,7 +120,7 @@ sendDmxMessageToAds = (message) ->
   , (err) ->
     if err then console.log "Dmx Write error", err
 
-#Socket IO
+# Bridge sockets
 
 isWriteMessage = (message) -> message.command is "write"
 
@@ -182,6 +182,7 @@ readTimeServices = ->
       console.log "Received heartbeat from ADS server"
 
 if process.env.NODE_ENV is "dev"
+  console.log "NODE_ENV=dev"
   adsClient =
     write: (handle, cb) ->
       console.log handle
