@@ -140,7 +140,7 @@ async.series openStreams, (err, [bridgeDaliStream, bridgeDmxStream, bridgeAcStre
   bridgeDmxStream.onEnd -> exit "Bridge DMX stream ended"
   bridgeAcStream.onEnd -> exit "Bridge AC stream ended"
   bridgeDaliStream.onError (err) -> exit "Error from bridge Dali stream:", err
-  bridgeDmxStream.onError (err) -> exit "Error from bridge DMX stream:", errß
+  bridgeDmxStream.onError (err) -> exit "Error from bridge DMX stream:", err
   bridgeAcStream.onError (err) -> exit "Error from bridge AC stream:", err
   bridgeMessagesToAds bridgeDaliStream, sendDaliMessageToAds
   bridgeMessagesToAds bridgeDmxStream, sendDmxMessageToAds
