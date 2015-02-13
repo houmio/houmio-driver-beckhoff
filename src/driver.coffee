@@ -32,7 +32,7 @@ bridgeMotorSocket = new net.Socket()
 
 adsClient = null
 
-#ADS Messages
+# ADS Messages
 
 #RELAY AND DIMMER FUNCTIONS
 relayToAds = (address, onBool, relayToAdsCb) ->
@@ -182,21 +182,25 @@ beckhoffOptions = {
   #amsPortTarget: 300
 }
 
-adsClient = ads.connect beckhoffOptions, ->
-  console.log "Connected to Beckhoff ADS server"
-  this.getSymbols (err, result) ->
-  #  console.log "ERROR: ", err
-  #  console.log "symbols", result
-  dataHandle = {
-    symname: ".SYSTEMSERVICE_TIMESERVICES",
-    bytelength: ads.UDINT,
-    propname: 'value'
-  }
-  adsClient.read dataHandle, (err, handle) ->
-    unless err
-      setInterval readCheckDataFromAds, 5000
-    else
-      exit "Error: no connection to ADS server"
-
-
-adsClient.on 'error', exit
+if process.env.NODE_ENV is "dev"
+  adsClient =
+    write: (handle, cb) ->
+      console.log handle
+      cb null
+else
+  adsClient = ads.connect beckhoffOptions, ->
+    console.log "Connected to Beckhoff ADS server"
+    this.getSymbols (err, result) ->
+    #  console.log "ERROR: ", err
+    #  console.log "symbols", result
+    dataHandle = {
+      symname: ".SYSTEMSERVICE_TIMESERVICES",
+      bytelength: ads.UDINT,
+      propname: 'value'
+    }
+    adsClient.read dataHandle, (err, handle) ->
+      unless err
+        setInterval readCheckDataFromAds, 5000
+      else
+        exit "Error: no connection to ADS server"
+  adsClient.on 'error', exit
