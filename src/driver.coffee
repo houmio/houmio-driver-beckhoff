@@ -124,14 +124,6 @@ sendDmxMessageToAds = (message) ->
 
 isWriteMessage = (message) -> message.command is "write"
 
-bridgeMessagesToAds = (bridgeStream, sendMessageToAds) ->
-  bridgeStream
-    .filter isWriteMessage
-    .bufferingThrottle houmioBeckhoffThrottle
-    .onValue (message) ->
-      sendMessageToAds message
-      console.log "<-- Data To ADS:", message
-
 toLines = (socket) ->
   Bacon.fromBinder (sink) ->
     carrier.carry socket, sink
@@ -139,33 +131,27 @@ toLines = (socket) ->
     socket.on "error", (err) -> sink new Bacon.Error(err)
     ( -> )
 
-
-openBridgeMessageStream = (socket) -> (cb) ->
+openBridgeWriteMessageStream = (socket, protocolName) -> (cb) ->
   socket.connect houmioBridge.split(":")[1], houmioBridge.split(":")[0], ->
     lineStream = toLines socket
     messageStream = lineStream.map JSON.parse
-    cb null, messageStream
+    messageStream.onEnd -> exit "Bridge stream ended, protocol: #{protocolName}"
+    messageStream.onError (err) -> exit "Error from bridge stream, protocol: #{protocolName}, error: #{err}"
+    writeMessageStream = messageStream.filter isWriteMessage
+    cb null, writeMessageStream
 
-openStreams = [ openBridgeMessageStream(bridgeDaliSocket), openBridgeMessageStream(bridgeDmxSocket), openBridgeMessageStream(bridgeAcSocket), openBridgeMessageStream(bridgeMotorSocket)]
+openStreams = [ openBridgeWriteMessageStream(bridgeDaliSocket, "DALI")
+              , openBridgeWriteMessageStream(bridgeDmxSocket, "DMX")
+              , openBridgeWriteMessageStream(bridgeAcSocket, "AC") ]
 
-async.series openStreams, (err, [bridgeDaliStream, bridgeDmxStream, bridgeAcStream, bridgeMotorStream]) ->
+async.series openStreams, (err, [daliWriteMessages, dmxWriteMessages, acWriteMessages]) ->
   if err then exit err
-  bridgeDaliStream.onEnd -> exit "Bridge Dali stream ended"
-  bridgeDmxStream.onEnd -> exit "Bridge DMX stream ended"
-  bridgeAcStream.onEnd -> exit "Bridge AC stream ended"
-  bridgeMotorStream.onEnd -> exit "Bridge Motor stream ended"
-  bridgeDaliStream.onError (err) -> exit "Error from bridge Dali stream:", err
-  bridgeDmxStream.onError (err) -> exit "Error from bridge DMX stream:", err
-  bridgeAcStream.onError (err) -> exit "Error from bridge AC stream:", err
-  bridgeMotorStream.onError (err) -> exit "Error from bridge Motor stream:", err
-  bridgeMessagesToAds bridgeDaliStream, sendDaliMessageToAds
-  bridgeMessagesToAds bridgeDmxStream, sendDmxMessageToAds
-  bridgeMessagesToAds bridgeAcStream, sendAcMessageToAds
-  bridgeMessagesToAds bridgeMotorStream, sendMotorMessageToAds
+  daliWriteMessages.onValue sendMessageToAds
+  dmxWriteMessages.onValue sendDmxMessageToAds
+  acWriteMessages.onValue sendAcMessageToAds
   bridgeDaliSocket.write (JSON.stringify { command: "driverReady", protocol: "beckhoff/dali"}) + "\n"
   bridgeDmxSocket.write (JSON.stringify { command: "driverReady", protocol: "beckhoff/dmx"}) + "\n"
   bridgeAcSocket.write (JSON.stringify { command: "driverReady", protocol: "beckhoff/ac"}) + "\n"
-  bridgeMotorSocket.write (JSON.stringify { command: "driverReady", protocol: "beckhoff/motor"}) + "\n"
 
 readCheckDataFromAds = ->
   dataHandle = {
