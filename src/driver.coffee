@@ -27,38 +27,51 @@ console.log "Using HOUMIO_BECKHOFF_AMS_TARGET_ID=#{houmioAmsTargetId}"
 bridgeDaliSocket = new net.Socket()
 bridgeDmxSocket = new net.Socket()
 bridgeAcSocket = new net.Socket()
+bridgeMotorSocket = new net.Socket()
 
 adsClient = null
 
 #ADS Messages
 
+#RELAY AND DIMMER FUNCTIONS
+relayToAds = (address, onBool, relayToAdsCb) ->
+  if onBool is true then onOff = 1 else onOff = 0
+  dataHandle = {
+    symname: ".HMI_RelayControls[#{address}]",
+    bytelength: ads.BYTE,
+    value: onOff
+  }
+  if adsClient
+    adsClient.write dataHandle, relayToAdsCb
+
+dimmerToAds = (address, bri, dimmerToAdsCb) ->
+  dataHandle = {
+    symname: ".HMI_DimmerControls[#{address}]"
+    bytelength: ads.INT,
+    value: bri
+  }
+  if adsClient
+    adsClient.write dataHandle, dimmerToAdsCb
+
 sendAcMessageToAds = (message) ->
   #console.log "AC Message", message
   if message.data.type is 'binary'
-    if message.data.on is true then onOff = 1 else onOff = 0
-    dataHandle = {
-      symname: ".HMI_RelayControls[#{message.data.protocolAddress}]",
-      bytelength: ads.BYTE,
-      value: onOff
-    }
-    try
-      adsClient.write dataHandle, (err) ->
-        if err then console.log "AC Relay Write Error", err
-    catch error
-      console.log "General AC Relay Write Error", error
-  else
-    dataHandle = {
-      symname: ".HMI_DimmerControls[#{message.data.protocolAddress}]"
-      bytelength: ads.INT,
-      value: message.data.bri
-    }
-    try
-      adsClient.write dataHandle, (err) ->
-        if err then console.log "AC Relay Write Error", err
-    catch error
-      console.log "General AC Relay Write Error", error
+    relayToAds message.data.protocolAddress, message.data.on, (err) ->
+      if err then console.log "AC Relay Write Error", err
+  if message.data.type is 'dimmable'
+    dimmerToAds message.data.protocolAddress, message.data.bri, (err) ->
+      if err then console.log "Dimmer write error"
+
+#MOTOR CONTROL
+sendMotorMessageToAds = (message) ->
+  addrTime = message.data.protocolAddress.split("/")
+  addresses = _.object ['start', 'stop'], addrTime[0].split(",")
+  time = parseInt(addrTime[1])
+  console.log "ADDRESSES", addresses
 
 
+
+#DALI WRITE
 daliToAds = (address, value, daliToAdsCb) ->
   dataHandle = {
     symname: ".HMI_LightControls[#{address}]",
@@ -77,6 +90,7 @@ sendDaliMessageToAds = (message) ->
     , (err) ->
       if err then console.log "Dali Write error", err
 
+#DMX WRITE
 dmxToAds = (address, value, dmxToAdsCb) ->
   dataHandle = {
     symname: ".HMI_DMXPROCDATA[#{address}]",
@@ -131,23 +145,26 @@ openBridgeMessageStream = (socket) -> (cb) ->
     messageStream = lineStream.map JSON.parse
     cb null, messageStream
 
-openStreams = [ openBridgeMessageStream(bridgeDaliSocket), openBridgeMessageStream(bridgeDmxSocket), openBridgeMessageStream(bridgeAcSocket)]
+openStreams = [ openBridgeMessageStream(bridgeDaliSocket), openBridgeMessageStream(bridgeDmxSocket), openBridgeMessageStream(bridgeAcSocket), openBridgeMessageStream(bridgeMotorSocket)]
 
-#openStreams = [ openBridgeMessageStream(bridgeDmxSocket) ]
-async.series openStreams, (err, [bridgeDaliStream, bridgeDmxStream, bridgeAcStream]) ->
+async.series openStreams, (err, [bridgeDaliStream, bridgeDmxStream, bridgeAcStream, bridgeMotorStream]) ->
   if err then exit err
   bridgeDaliStream.onEnd -> exit "Bridge Dali stream ended"
   bridgeDmxStream.onEnd -> exit "Bridge DMX stream ended"
   bridgeAcStream.onEnd -> exit "Bridge AC stream ended"
+  bridgeMotorStream.onEnd -> exit "Bridge Motor stream ended"
   bridgeDaliStream.onError (err) -> exit "Error from bridge Dali stream:", err
   bridgeDmxStream.onError (err) -> exit "Error from bridge DMX stream:", err
   bridgeAcStream.onError (err) -> exit "Error from bridge AC stream:", err
+  bridgeMotorStream.onError (err) -> exit "Error from bridge Motor stream:", err
   bridgeMessagesToAds bridgeDaliStream, sendDaliMessageToAds
   bridgeMessagesToAds bridgeDmxStream, sendDmxMessageToAds
   bridgeMessagesToAds bridgeAcStream, sendAcMessageToAds
+  bridgeMessagesToAds bridgeMotorStream, sendMotorMessageToAds
   bridgeDaliSocket.write (JSON.stringify { command: "driverReady", protocol: "beckhoff/dali"}) + "\n"
   bridgeDmxSocket.write (JSON.stringify { command: "driverReady", protocol: "beckhoff/dmx"}) + "\n"
   bridgeAcSocket.write (JSON.stringify { command: "driverReady", protocol: "beckhoff/ac"}) + "\n"
+  bridgeMotorSocket.write (JSON.stringify { command: "driverReady", protocol: "beckhoff/motor"}) + "\n"
 
 readCheckDataFromAds = ->
   dataHandle = {
@@ -159,6 +176,7 @@ readCheckDataFromAds = ->
   adsClient.read dataHandle, (err, handle) ->
     unless err
       clearTimeout errorTimeout
+      console.log "Heartbeat"
 
 #Beckhoff AMS connection
 
@@ -179,9 +197,19 @@ beckhoffOptions = {
 
 adsClient = ads.connect beckhoffOptions, ->
   console.log "Connected to Beckhoff ADS server"
-  setInterval readCheckDataFromAds, 1000
-  #this.getSymbols (err, result) ->
+  this.getSymbols (err, result) ->
   #  console.log "ERROR: ", err
   #  console.log "symbols", result
+  dataHandle = {
+    symname: ".SYSTEMSERVICE_TIMESERVICES",
+    bytelength: ads.UDINT,
+    propname: 'value'
+  }
+  adsClient.read dataHandle, (err, handle) ->
+    unless err
+      setInterval readCheckDataFromAds, 5000
+    else
+      exit
+
 
 adsClient.on 'error', exit
