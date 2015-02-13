@@ -153,34 +153,33 @@ async.series openStreams, (err, [daliWriteMessages, dmxWriteMessages, acWriteMes
   bridgeDmxSocket.write (JSON.stringify { command: "driverReady", protocol: "beckhoff/dmx"}) + "\n"
   bridgeAcSocket.write (JSON.stringify { command: "driverReady", protocol: "beckhoff/ac"}) + "\n"
 
-readCheckDataFromAds = ->
-  dataHandle = {
-    symname: ".SYSTEMSERVICE_TIMESERVICES",
-    bytelength: ads.UDINT,
-    propname: 'value'
-  }
+timeServicesHandle =
+  symname: ".SYSTEMSERVICE_TIMESERVICES"
+  bytelength: ads.UDINT
+  propname: 'value'
+
+# Beckhoff AMS connection
+# amsNetIdTarget: The NetId of the target machine
+# amsNetIdSource:
+#   The NetId of the source machine.
+#   You can choose anything in the form of x.x.x.x.x.x,
+#   but on the target machine this must be added as a route.
+# amsPortTarget: Other possible ports: 27906, 300
+
+beckhoffOptions =
+  host: houmioBeckhoffIp
+  amsNetIdTarget: houmioAmsTargetId
+  amsNetIdSource: houmioAmsSourceId
+  amsPortTarget: 801
+
+readTimeServices = ->
   errorTimeout = setTimeout ( -> exit "Error: ADS server timeout" ), 10000
-  adsClient.read dataHandle, (err, handle) ->
-    unless err
+  adsClient.read timeServicesHandle, (err, handle) ->
+    if err
+      exit "Error from ADS heartbeat: #{err}"
+    else
       clearTimeout errorTimeout
       console.log "Received heartbeat from ADS server"
-
-#Beckhoff AMS connection
-
-beckhoffOptions = {
-  #The IP or hostname of the target machine
-  host: houmioBeckhoffIp,
-  #The NetId of the target machine
-  amsNetIdTarget: houmioAmsTargetId,
-  #amsNetIdTarget: "5.21.69.109.3.4",
-  #The NetId of the source machine.
-  #You can choose anything in the form of x.x.x.x.x.x,
-  #but on the target machine this must be added as a route.
-  amsNetIdSource: houmioAmsSourceId,
-  amsPortTarget: 801
-  #amsPortTarget: 27906
-  #amsPortTarget: 300
-}
 
 if process.env.NODE_ENV is "dev"
   adsClient =
@@ -189,18 +188,10 @@ if process.env.NODE_ENV is "dev"
       cb null
 else
   adsClient = ads.connect beckhoffOptions, ->
-    console.log "Connected to Beckhoff ADS server"
-    this.getSymbols (err, result) ->
-    #  console.log "ERROR: ", err
-    #  console.log "symbols", result
-    dataHandle = {
-      symname: ".SYSTEMSERVICE_TIMESERVICES",
-      bytelength: ads.UDINT,
-      propname: 'value'
-    }
-    adsClient.read dataHandle, (err, handle) ->
-      unless err
-        setInterval readCheckDataFromAds, 5000
-      else
+    console.log "Connected to Beckhoff ADS server, setting up heartbeat check"
+    adsClient.read timeServicesHandle, (err, handle) ->
+      if err
         exit "Error: no connection to ADS server"
+      else
+        setInterval readTimeServices, 5000
   adsClient.on 'error', exit
