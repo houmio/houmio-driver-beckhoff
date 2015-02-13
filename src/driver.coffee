@@ -70,8 +70,6 @@ sendMotorMessageToAds = (message) ->
   time = parseInt(addrTime[1])
   console.log "ADDRESSES", addresses
 
-
-
 #DALI WRITE
 daliToAds = (address, value, daliToAdsCb) ->
   dataHandle = {
@@ -91,34 +89,35 @@ sendDaliMessageToAds = (message) ->
     , (err) ->
       if err then console.log "Dali Write error", err
 
-#DMX WRITE
-dmxToAds = (address, value, dmxToAdsCb) ->
-  dataHandle = {
-    symname: ".HMI_DMXPROCDATA[#{address}]",
-    bytelength: ads.BYTE,
-    propname: 'value',
+# DMX functions
+
+splitDmxProtocolAddress = (writeMessage) ->
+  _.map writeMessage.data.protocolAddress.split(","), (dmxAddress) ->
+    writeMessageForSingleDmxAddress = _.cloneDeep writeMessage
+    writeMessageForSingleDmxAddress.data.protocolAddress = dmxAddress
+    writeMessageForSingleDmxAddress
+
+dmxAddressAndValueToAdsHandle = (address, value) ->
+  {
+    symname: ".HMI_DMXPROCDATA[#{address}]"
+    bytelength: ads.BYTE
+    propname: 'value'
     value: value
   }
-  if adsClient
-    adsClient.write dataHandle, dmxToAdsCb
 
-selectAndSendToDmx = (address, message, cb) ->
-  if message.data.type is 'color'
-    rgbw = cc.hsvToRgbw message.data.hue, message.data.saturation, message.data.bri
-    index = address
-    async.eachSeries rgbw, (val, cb) ->
-      dmxToAds index, val, cb
-      index++
-    , cb
+writeMessageToDmxMessages = (writeMessage) ->
+  if writeMessage.data.type is 'color'
+    rgbw = cc.hsvToRgbw writeMessage.data.hue, writeMessage.data.saturation, writeMessage.data.bri
+    address = parseInt writeMessage.data.protocolAddress
+    _.map rgbw, (channelValue, i) -> dmxAddressAndValueToAdsHandle(address + i, channelValue)
   else
-    dmxToAds address, message.data.bri, cb
+    [ dmxAddressAndValueToAdsHandle(writeMessage.data.protocolAddress, writeMessage.data.bri)]
 
-sendDmxMessageToAds = (message) ->
-  addresses = message.data.protocolAddress.split(",")
-  async.eachSeries addresses, (addr, cb) ->
-    selectAndSendToDmx addr, message, cb
-  , (err) ->
-    if err then console.log "Dmx Write error", err
+# ADS write
+
+writeToAds = (handle) ->
+  adsClient.write handle, (err) ->
+    if err then exit "Error while writing to ADS: #{err}"
 
 # Bridge sockets
 
@@ -147,7 +146,10 @@ openStreams = [ openBridgeWriteMessageStream(bridgeDaliSocket, "DALI")
 async.series openStreams, (err, [daliWriteMessages, dmxWriteMessages, acWriteMessages]) ->
   if err then exit err
   daliWriteMessages.onValue sendDaliMessageToAds
-  dmxWriteMessages.onValue sendDmxMessageToAds
+  dmxWriteMessages
+    .flatMap (m) -> Bacon.fromArray splitDmxProtocolAddress m
+    .flatMap (m) -> Bacon.fromArray writeMessageToDmxMessages m
+    .onValue writeToAds
   acWriteMessages.onValue sendAcMessageToAds
   bridgeDaliSocket.write (JSON.stringify { command: "driverReady", protocol: "beckhoff/dali"}) + "\n"
   bridgeDmxSocket.write (JSON.stringify { command: "driverReady", protocol: "beckhoff/dmx"}) + "\n"
