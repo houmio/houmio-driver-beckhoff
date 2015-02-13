@@ -15,6 +15,7 @@ houmioBridge = process.env.HOUMIO_BRIDGE || "localhost:3001"
 houmioBeckhoffIp = process.env.HOUMIO_BECKHOFF_IP
 houmioAmsSourceId = process.env.HOUMIO_BECKHOFF_AMS_SOURCE_ID
 houmioAmsTargetId = process.env.HOUMIO_BECKHOFF_AMS_TARGET_ID
+houmioBeckhoffThrottle = process.env.HOUMIO_BECKHOFF_THROTTLE || 15
 
 unless houmioBeckhoffIp then exit "HOUMIO_BECKHOFF_IP is not set"
 unless houmioAmsSourceId then exit "HOUMIO_BECKHOFF_AMS_SOURCE_ID is not set"
@@ -111,7 +112,7 @@ isWriteMessage = (message) -> message.command is "write"
 bridgeMessagesToAds = (bridgeStream, sendMessageToAds) ->
   bridgeStream
     .filter isWriteMessage
-    .bufferingThrottle 10
+    .bufferingThrottle houmioBeckhoffThrottle
     .onValue (message) ->
       sendMessageToAds message
       console.log "<-- Data To ADS:", message
