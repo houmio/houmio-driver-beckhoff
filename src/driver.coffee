@@ -146,7 +146,7 @@ openStreams = [ openBridgeWriteMessageStream(bridgeDaliSocket, "DALI")
 
 async.series openStreams, (err, [daliWriteMessages, dmxWriteMessages, acWriteMessages]) ->
   if err then exit err
-  daliWriteMessages.onValue sendMessageToAds
+  daliWriteMessages.onValue sendDaliMessageToAds
   dmxWriteMessages.onValue sendDmxMessageToAds
   acWriteMessages.onValue sendAcMessageToAds
   bridgeDaliSocket.write (JSON.stringify { command: "driverReady", protocol: "beckhoff/dali"}) + "\n"
