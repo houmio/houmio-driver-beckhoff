@@ -155,6 +155,8 @@ async.series openStreams, (err, [daliWriteMessages, dmxWriteMessages, acWriteMes
   bridgeDmxSocket.write (JSON.stringify { command: "driverReady", protocol: "beckhoff/dmx"}) + "\n"
   bridgeAcSocket.write (JSON.stringify { command: "driverReady", protocol: "beckhoff/ac"}) + "\n"
 
+# ADS client
+
 timeServicesHandle =
   symname: ".SYSTEMSERVICE_TIMESERVICES"
   bytelength: ads.UDINT
