@@ -70,32 +70,18 @@ sendMotorMessageToAds = (message) ->
   time = parseInt(addrTime[1])
   console.log "ADDRESSES", addresses
 
-#DALI WRITE
-daliToAds = (address, value, daliToAdsCb) ->
-  dataHandle = {
-    symname: ".HMI_LightControls[#{address}]",
+# Dali functions
+
+writeMessageToDaliMessage = (writeMessage) ->
+  v = if writeMessage.data.bri is 255 then 254 else writeMessage.data.bri
+  {
+    symname: ".HMI_LightControls[#{writeMessage.data.protocolAddress}]",
     bytelength: 2,
     propname: 'value',
-    value: new Buffer [0x01, value]
+    value: new Buffer [0x01, v]
   }
-  if adsClient
-    adsClient.write dataHandle, daliToAdsCb
-
-sendDaliMessageToAds = (message) ->
-  if message.data.bri is 255 then message.data.bri = 254
-  addresses = message.data.protocolAddress.split(",")
-  async.eachSeries addresses, (addr, cb) ->
-      daliToAds addr, message.data.bri, cb
-    , (err) ->
-      if err then console.log "Dali Write error", err
 
 # DMX functions
-
-splitDmxProtocolAddress = (writeMessage) ->
-  _.map writeMessage.data.protocolAddress.split(","), (dmxAddress) ->
-    writeMessageForSingleDmxAddress = _.cloneDeep writeMessage
-    writeMessageForSingleDmxAddress.data.protocolAddress = dmxAddress
-    writeMessageForSingleDmxAddress
 
 dmxAddressAndValueToAdsHandle = (address, value) ->
   {
@@ -112,6 +98,14 @@ writeMessageToDmxMessages = (writeMessage) ->
     _.map rgbw, (channelValue, i) -> dmxAddressAndValueToAdsHandle(address + i, channelValue)
   else
     [ dmxAddressAndValueToAdsHandle(writeMessage.data.protocolAddress, writeMessage.data.bri)]
+
+# Helpers
+
+splitProtocolAddressOnComma = (writeMessage) ->
+  _.map writeMessage.data.protocolAddress.split(","), (singleAddress) ->
+    writeMessageForSingleAddress = _.cloneDeep writeMessage
+    writeMessageForSingleAddress.data.protocolAddress = singleAddress
+    writeMessageForSingleAddress
 
 # Bridge sockets
 
@@ -139,9 +133,12 @@ openStreams = [ openBridgeWriteMessageStream(bridgeDaliSocket, "DALI")
 
 async.series openStreams, (err, [daliWriteMessages, dmxWriteMessages, acWriteMessages]) ->
   if err then exit err
-  daliWriteMessages.onValue sendDaliMessageToAds
+  daliWriteMessages
+    .flatMap (m) -> Bacon.fromArray splitProtocolAddressOnComma m
+    .map writeMessageToDaliMessage
+    .onValue doWriteToAds
   dmxWriteMessages
-    .flatMap (m) -> Bacon.fromArray splitDmxProtocolAddress m
+    .flatMap (m) -> Bacon.fromArray splitProtocolAddressOnComma m
     .flatMap (m) -> Bacon.fromArray writeMessageToDmxMessages m
     .onValue doWriteToAds
   acWriteMessages.onValue sendAcMessageToAds
