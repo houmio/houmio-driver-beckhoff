@@ -113,12 +113,6 @@ writeMessageToDmxMessages = (writeMessage) ->
   else
     [ dmxAddressAndValueToAdsHandle(writeMessage.data.protocolAddress, writeMessage.data.bri)]
 
-# ADS write
-
-writeToAds = (handle) ->
-  adsClient.write handle, (err) ->
-    if err then exit "Error while writing to ADS: #{err}"
-
 # Bridge sockets
 
 isWriteMessage = (message) -> message.command is "write"
@@ -149,13 +143,17 @@ async.series openStreams, (err, [daliWriteMessages, dmxWriteMessages, acWriteMes
   dmxWriteMessages
     .flatMap (m) -> Bacon.fromArray splitDmxProtocolAddress m
     .flatMap (m) -> Bacon.fromArray writeMessageToDmxMessages m
-    .onValue writeToAds
+    .onValue doWriteToAds
   acWriteMessages.onValue sendAcMessageToAds
   bridgeDaliSocket.write (JSON.stringify { command: "driverReady", protocol: "beckhoff/dali"}) + "\n"
   bridgeDmxSocket.write (JSON.stringify { command: "driverReady", protocol: "beckhoff/dmx"}) + "\n"
   bridgeAcSocket.write (JSON.stringify { command: "driverReady", protocol: "beckhoff/ac"}) + "\n"
 
 # ADS client
+
+doWriteToAds = (handle) ->
+  adsClient.write handle, (err) ->
+    if err then exit "Error while writing to ADS: #{err}"
 
 timeServicesHandle =
   symname: ".SYSTEMSERVICE_TIMESERVICES"
