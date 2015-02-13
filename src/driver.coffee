@@ -23,6 +23,7 @@ unless houmioAmsTargetId then exit "HOUMIO_BECKHOFF_AMS_TARGET_ID is not set"
 console.log "Using HOUMIO_BECKHOFF_IP=#{houmioBeckhoffIp}"
 console.log "Using HOUMIO_BECKHOFF_AMS_SOURCE_ID=#{houmioAmsSourceId}"
 console.log "Using HOUMIO_BECKHOFF_AMS_TARGET_ID=#{houmioAmsTargetId}"
+console.log "Using HOUMIO_BECKHOFF_THROTTLE=#{houmioBeckhoffThrottle}"
 
 bridgeDaliSocket = new net.Socket()
 bridgeDmxSocket = new net.Socket()
