@@ -159,11 +159,11 @@ readCheckDataFromAds = ->
     bytelength: ads.UDINT,
     propname: 'value'
   }
-  errorTimeout = setTimeout exit, 10000
+  errorTimeout = setTimeout ( -> exit "Error: ADS server timeout" ), 10000
   adsClient.read dataHandle, (err, handle) ->
     unless err
       clearTimeout errorTimeout
-      console.log "Heartbeat"
+      console.log "Received heartbeat from ADS server"
 
 #Beckhoff AMS connection
 
@@ -196,7 +196,7 @@ adsClient = ads.connect beckhoffOptions, ->
     unless err
       setInterval readCheckDataFromAds, 5000
     else
-      exit
+      exit "Error: no connection to ADS server"
 
 
 adsClient.on 'error', exit
