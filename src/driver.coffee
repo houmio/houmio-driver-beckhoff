@@ -77,19 +77,32 @@ timeServicesHandle =
   propname: 'value'
 
 #DIMMER AND RELAY
-sendAcMessageToAds = (message) ->
-  #console.log "AC Message", message
-  if message.data.type is 'binary'
-    doWriteToAds writeMessageToRelayMessage(message)
-  if message.data.type is 'dimmable'
-    doWriteToAds writeMessageToDimmerMessage(message)
+writeMessageToAcMessage = (writeMessage) ->
+  if writeMessage.data.type is 'binary'
+    return writeMessageToRelayMessage(writeMessage)
+  if writeMessage.data.type is 'dimmable'
+    return writeMessageToDimmerMessage(writeMessage)
 
 #MOTOR CONTROL
-sendMotorMessageToAds = (writeMessage) ->
+writeMessageToMotorMessages = (writeMessage) ->
   addrTime = writeMessage.data.protocolAddress.split("/")
-  addresses = _.object ['start', 'stop'], addrTime[0].split(",")
+  writeMessage.data.protocolAddress = addrTime[0]
+  commands = splitProtocolAddressOnComma writeMessage
   time = parseInt(addrTime[1])
-  console.log "ADDRESSES", addresses
+  if writeMessage.data.on is true
+    delayedCmd = _.cloneDeep commands[0]
+    delayedCmd.data.on = false
+    commands[1].data.on = false
+    Bacon.once(writeMessageToRelayMessage commands[0])
+      .concat(Bacon.once(writeMessageToRelayMessage commands[1]))
+      .concat(Bacon.later(time, writeMessageToRelayMessage(delayedCmd)))
+  else
+    delayedCmd = _.cloneDeep commands[1]
+    delayedCmd.data.on = false
+    commands[1].data.on = true
+    Bacon.once(writeMessageToRelayMessage commands[1])
+      .concat(Bacon.once(writeMessageToRelayMessage commands[0]))
+      .concat(Bacon.later(time, writeMessageToRelayMessage(delayedCmd)))
 
 # DMX functions
 
@@ -100,6 +113,11 @@ writeMessageToDmxMessages = (writeMessage) ->
     _.map rgbw, (channelValue, i) -> dmxAddressAndValueToAdsHandle(address + i, channelValue)
   else
     [ dmxAddressAndValueToAdsHandle(writeMessage.data.protocolAddress, writeMessage.data.bri)]
+
+
+
+
+
 
 # Helpers
 
@@ -131,9 +149,10 @@ openBridgeWriteMessageStream = (socket, protocolName) -> (cb) ->
 
 openStreams = [ openBridgeWriteMessageStream(bridgeDaliSocket, "DALI")
               , openBridgeWriteMessageStream(bridgeDmxSocket, "DMX")
-              , openBridgeWriteMessageStream(bridgeAcSocket, "AC") ]
+              , openBridgeWriteMessageStream(bridgeAcSocket, "AC")
+              , openBridgeWriteMessageStream(bridgeMotorSocket, "MOTOR") ]
 
-async.series openStreams, (err, [daliWriteMessages, dmxWriteMessages, acWriteMessages]) ->
+async.series openStreams, (err, [daliWriteMessages, dmxWriteMessages, acWriteMessages, motorWriteMessages]) ->
   if err then exit err
   daliWriteMessages
     .flatMap (m) -> Bacon.fromArray splitProtocolAddressOnComma m
@@ -143,10 +162,17 @@ async.series openStreams, (err, [daliWriteMessages, dmxWriteMessages, acWriteMes
     .flatMap (m) -> Bacon.fromArray splitProtocolAddressOnComma m
     .flatMap (m) -> Bacon.fromArray writeMessageToDmxMessages m
     .onValue doWriteToAds
-  acWriteMessages.onValue sendAcMessageToAds
+  acWriteMessages
+    .flatMap (m) -> Bacon.fromArray splitProtocolAddressOnComma m
+    .map writeMessageToAcMessage
+    .onValue doWriteToAds
+  motorWriteMessages
+    .flatMapLatest (m) -> writeMessageToMotorMessages m
+    .onValue doWriteToAds
   bridgeDaliSocket.write (JSON.stringify { command: "driverReady", protocol: "beckhoff/dali"}) + "\n"
   bridgeDmxSocket.write (JSON.stringify { command: "driverReady", protocol: "beckhoff/dmx"}) + "\n"
   bridgeAcSocket.write (JSON.stringify { command: "driverReady", protocol: "beckhoff/ac"}) + "\n"
+  bridgeMotorSocket.write (JSON.stringify { command: "driverReady", protocol: "beckhoff/motor"}) + "\n"
 
 # ADS client
 
