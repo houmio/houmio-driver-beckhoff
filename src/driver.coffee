@@ -74,11 +74,6 @@ writeMessageToMotorMessages = (writeMessage) ->
     delay: parseInt delay
   }
 
-messagesToMotorStream = (messages) ->
-  Bacon.once(writeMessageToRelayMessage messages.onMessage)
-    .concat(Bacon.once(writeMessageToRelayMessage messages.offMessage))
-    .concat(Bacon.later(messages.delay, writeMessageToRelayMessage(messages.delayedMessage)))
-
 writeMessageToRelayMessage = (writeMessage) ->
   if writeMessage.data.on is true then onOff = 1 else onOff = 0
   {
