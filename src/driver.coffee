@@ -32,27 +32,15 @@ bridgeMotorSocket = new net.Socket()
 
 adsClient = null
 
-# ADS Messages
+# ADS write
 
 doWriteToAds = (handle) ->
   adsClient.write handle, (err) ->
     if err then exit "Error while writing to ADS: #{err}"
 
-#DATA HANDLES
-writeMessageToRelayMessage = (writeMessage) ->
-  if writeMessage.data.on is true then onOff = 1 else onOff = 0
-  {
-    symname: ".HMI_RelayControls[#{writeMessage.data.protocolAddress}]",
-    bytelength: ads.BYTE,
-    value: onOff
-  }
+# ADS messages
 
-writeMessageToDimmerMessage = (writeMessage) ->
-  {
-    symname: ".HMI_DimmerControls[#{writeMessage.data.protocolAddress}]"
-    bytelength: ads.INT,
-    value: writeMessage.data.bri
-  }
+## DALI functions
 
 writeMessageToDaliMessage = (writeMessage) ->
   v = if writeMessage.data.bri is 255 then 254 else writeMessage.data.bri
@@ -63,27 +51,14 @@ writeMessageToDaliMessage = (writeMessage) ->
     value: new Buffer [0x01, v]
   }
 
-dmxAddressAndValueToAdsHandle = (address, value) ->
-  {
-    symname: ".HMI_DMXPROCDATA[#{address}]"
-    bytelength: ads.BYTE
-    propname: 'value'
-    value: value
-  }
+## Motor control and AC functions
 
-timeServicesHandle =
-  symname: ".SYSTEMSERVICE_TIMESERVICES"
-  bytelength: ads.UDINT
-  propname: 'value'
-
-#DIMMER AND RELAY
 writeMessageToAcMessage = (writeMessage) ->
   if writeMessage.data.type is 'binary'
     return writeMessageToRelayMessage(writeMessage)
   if writeMessage.data.type is 'dimmable'
     return writeMessageToDimmerMessage(writeMessage)
 
-#MOTOR CONTROL
 writeMessageToMotorMessages = (writeMessage) ->
   addrTime = writeMessage.data.protocolAddress.split("/")
   writeMessage.data.protocolAddress = addrTime[0]
@@ -104,7 +79,22 @@ writeMessageToMotorMessages = (writeMessage) ->
       .concat(Bacon.once(writeMessageToRelayMessage commands[0]))
       .concat(Bacon.later(time, writeMessageToRelayMessage(delayedCmd)))
 
-# DMX functions
+writeMessageToRelayMessage = (writeMessage) ->
+  if writeMessage.data.on is true then onOff = 1 else onOff = 0
+  {
+    symname: ".HMI_RelayControls[#{writeMessage.data.protocolAddress}]",
+    bytelength: ads.BYTE,
+    value: onOff
+  }
+
+writeMessageToDimmerMessage = (writeMessage) ->
+  {
+    symname: ".HMI_DimmerControls[#{writeMessage.data.protocolAddress}]"
+    bytelength: ads.INT,
+    value: writeMessage.data.bri
+  }
+
+## DMX functions
 
 writeMessageToDmxMessages = (writeMessage) ->
   if writeMessage.data.type is 'color'
@@ -114,10 +104,13 @@ writeMessageToDmxMessages = (writeMessage) ->
   else
     [ dmxAddressAndValueToAdsHandle(writeMessage.data.protocolAddress, writeMessage.data.bri)]
 
-
-
-
-
+dmxAddressAndValueToAdsHandle = (address, value) ->
+  {
+    symname: ".HMI_DMXPROCDATA[#{address}]"
+    bytelength: ads.BYTE
+    propname: 'value'
+    value: value
+  }
 
 # Helpers
 
@@ -189,6 +182,11 @@ beckhoffOptions =
   amsNetIdTarget: houmioAmsTargetId
   amsNetIdSource: houmioAmsSourceId
   amsPortTarget: 801
+
+timeServicesHandle =
+  symname: ".SYSTEMSERVICE_TIMESERVICES"
+  bytelength: ads.UDINT
+  propname: 'value'
 
 readTimeServices = ->
   errorTimeout = setTimeout ( -> exit "Error: ADS server timeout" ), 10000
