@@ -63,14 +63,14 @@ writeMessageToMotorMessages = (writeMessage) ->
   [ addresses, delay ] = writeMessage.data.protocolAddress.split("/")
   cloneMessage = _.cloneDeep writeMessage
   cloneMessage.data.protocolAddress = addresses
-  commands = splitProtocolAddressOnComma cloneMessage
-  delayedCmd = if writeMessage.data.on then _.cloneDeep commands[0] else _.cloneDeep commands[1]
-  commands[1].data.on = !writeMessage.data.on
-  delayedCmd.data.on = false
+  [ onRelayWriteMessage, offRelayWriteMessage ] = splitProtocolAddressOnComma cloneMessage
+  delayedRelayWriteMessage = if writeMessage.data.on then _.cloneDeep onRelayWriteMessage else _.cloneDeep offRelayWriteMessage
+  offRelayWriteMessage.data.on = !writeMessage.data.on
+  delayedRelayWriteMessage.data.on = false
   {
-    on: commands[0],
-    off: commands[1],
-    delayed: delayedCmd,
+    on: onRelayWriteMessage,
+    off: offRelayWriteMessage,
+    delayed: delayedRelayWriteMessage,
     delay: parseInt delay
   }
 
