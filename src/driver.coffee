@@ -34,43 +34,25 @@ adsClient = null
 
 # ADS Messages
 
-#RELAY AND DIMMER FUNCTIONS
-relayToAds = (address, onBool, relayToAdsCb) ->
-  if onBool is true then onOff = 1 else onOff = 0
-  dataHandle = {
-    symname: ".HMI_RelayControls[#{address}]",
+doWriteToAds = (handle) ->
+  adsClient.write handle, (err) ->
+    if err then exit "Error while writing to ADS: #{err}"
+
+#DATA HANDLES
+writeMessageToRelayMessage = (writeMessage) ->
+  if writeMessage.data.on is true then onOff = 1 else onOff = 0
+  {
+    symname: ".HMI_RelayControls[#{writeMessage.data.protocolAddress}]",
     bytelength: ads.BYTE,
     value: onOff
   }
-  if adsClient
-    adsClient.write dataHandle, relayToAdsCb
 
-dimmerToAds = (address, bri, dimmerToAdsCb) ->
-  dataHandle = {
-    symname: ".HMI_DimmerControls[#{address}]"
+writeMessageToDimmerMessage = (writeMessage) ->
+  {
+    symname: ".HMI_DimmerControls[#{writeMessage.data.protocolAddress}]"
     bytelength: ads.INT,
-    value: bri
+    value: writeMessage.data.bri
   }
-  if adsClient
-    adsClient.write dataHandle, dimmerToAdsCb
-
-sendAcMessageToAds = (message) ->
-  #console.log "AC Message", message
-  if message.data.type is 'binary'
-    relayToAds message.data.protocolAddress, message.data.on, (err) ->
-      if err then console.log "AC Relay Write Error", err
-  if message.data.type is 'dimmable'
-    dimmerToAds message.data.protocolAddress, message.data.bri, (err) ->
-      if err then console.log "Dimmer write error"
-
-#MOTOR CONTROL
-sendMotorMessageToAds = (message) ->
-  addrTime = message.data.protocolAddress.split("/")
-  addresses = _.object ['start', 'stop'], addrTime[0].split(",")
-  time = parseInt(addrTime[1])
-  console.log "ADDRESSES", addresses
-
-# Dali functions
 
 writeMessageToDaliMessage = (writeMessage) ->
   v = if writeMessage.data.bri is 255 then 254 else writeMessage.data.bri
@@ -81,8 +63,6 @@ writeMessageToDaliMessage = (writeMessage) ->
     value: new Buffer [0x01, v]
   }
 
-# DMX functions
-
 dmxAddressAndValueToAdsHandle = (address, value) ->
   {
     symname: ".HMI_DMXPROCDATA[#{address}]"
@@ -90,6 +70,28 @@ dmxAddressAndValueToAdsHandle = (address, value) ->
     propname: 'value'
     value: value
   }
+
+timeServicesHandle =
+  symname: ".SYSTEMSERVICE_TIMESERVICES"
+  bytelength: ads.UDINT
+  propname: 'value'
+
+#DIMMER AND RELAY
+sendAcMessageToAds = (message) ->
+  #console.log "AC Message", message
+  if message.data.type is 'binary'
+    doWriteToAds writeMessageToRelayMessage(message)
+  if message.data.type is 'dimmable'
+    doWriteToAds writeMessageToDimmerMessage(message)
+
+#MOTOR CONTROL
+sendMotorMessageToAds = (writeMessage) ->
+  addrTime = writeMessage.data.protocolAddress.split("/")
+  addresses = _.object ['start', 'stop'], addrTime[0].split(",")
+  time = parseInt(addrTime[1])
+  console.log "ADDRESSES", addresses
+
+# DMX functions
 
 writeMessageToDmxMessages = (writeMessage) ->
   if writeMessage.data.type is 'color'
@@ -147,15 +149,6 @@ async.series openStreams, (err, [daliWriteMessages, dmxWriteMessages, acWriteMes
   bridgeAcSocket.write (JSON.stringify { command: "driverReady", protocol: "beckhoff/ac"}) + "\n"
 
 # ADS client
-
-doWriteToAds = (handle) ->
-  adsClient.write handle, (err) ->
-    if err then exit "Error while writing to ADS: #{err}"
-
-timeServicesHandle =
-  symname: ".SYSTEMSERVICE_TIMESERVICES"
-  bytelength: ads.UDINT
-  propname: 'value'
 
 # Beckhoff AMS connection
 # amsNetIdTarget: The NetId of the target machine
