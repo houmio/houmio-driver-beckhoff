@@ -161,8 +161,8 @@ async.series openStreams, (err, [daliWriteMessages, dmxWriteMessages, acWriteMes
     .onValue doWriteToAds
   motorWriteMessages
     .flatMapLatest (m) ->
-      motorMsgs = writeMessageToMotorMessages m
-      Bacon.fromArray([motorMsgs.on, motorMsgs.off]).concat(Bacon.later(motorMsgs.delay, motorMsgs.delayed))
+      motorMessages = writeMessageToMotorMessages m
+      Bacon.fromArray([motorMessages.on, motorMessages.off]).concat(Bacon.later(motorMessages.delay, motorMessages.delayed))
     .map writeMessageToRelayMessage
     .onValue doWriteToAds
   bridgeDaliSocket.write (JSON.stringify { command: "driverReady", protocol: "beckhoff/dali"}) + "\n"
