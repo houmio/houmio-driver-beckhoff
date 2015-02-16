@@ -15,7 +15,7 @@ houmioBridge = process.env.HOUMIO_BRIDGE || "localhost:3001"
 houmioBeckhoffIp = process.env.HOUMIO_BECKHOFF_IP
 houmioAmsSourceId = process.env.HOUMIO_BECKHOFF_AMS_SOURCE_ID
 houmioAmsTargetId = process.env.HOUMIO_BECKHOFF_AMS_TARGET_ID
-houmioBeckhoffThrottle = process.env.HOUMIO_BECKHOFF_THROTTLE || 15
+houmioBeckhoffDaliThrottle = process.env.HOUMIO_BECKHOFF_DALI_THROTTLE || 15
 
 unless houmioBeckhoffIp then exit "HOUMIO_BECKHOFF_IP is not set"
 unless houmioAmsSourceId then exit "HOUMIO_BECKHOFF_AMS_SOURCE_ID is not set"
@@ -23,7 +23,7 @@ unless houmioAmsTargetId then exit "HOUMIO_BECKHOFF_AMS_TARGET_ID is not set"
 console.log "Using HOUMIO_BECKHOFF_IP=#{houmioBeckhoffIp}"
 console.log "Using HOUMIO_BECKHOFF_AMS_SOURCE_ID=#{houmioAmsSourceId}"
 console.log "Using HOUMIO_BECKHOFF_AMS_TARGET_ID=#{houmioAmsTargetId}"
-console.log "Using HOUMIO_BECKHOFF_THROTTLE=#{houmioBeckhoffThrottle}"
+console.log "Using HOUMIO_BECKHOFF_DALI_THROTTLE=#{houmioBeckhoffDaliThrottle}"
 
 bridgeDaliSocket = new net.Socket()
 bridgeDmxSocket = new net.Socket()
@@ -145,7 +145,7 @@ async.series openStreams, (err, [daliWriteMessages, dmxWriteMessages, acWriteMes
   daliWriteMessages
     .flatMap (m) -> Bacon.fromArray splitProtocolAddressOnComma m
     .map writeMessageToDaliMessage
-    .bufferingThrottle houmioBeckhoffThrottle
+    .bufferingThrottle houmioBeckhoffDaliThrottle
     .onValue doWriteToAds
   dmxWriteMessages
     .flatMap (m) -> Bacon.fromArray splitProtocolAddressOnComma m
