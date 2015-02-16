@@ -150,6 +150,7 @@ async.series openStreams, (err, [daliWriteMessages, dmxWriteMessages, acWriteMes
   daliWriteMessages
     .flatMap (m) -> Bacon.fromArray splitProtocolAddressOnComma m
     .map writeMessageToDaliMessage
+    .bufferingThrottle houmioBeckhoffThrottle
     .onValue doWriteToAds
   dmxWriteMessages
     .flatMap (m) -> Bacon.fromArray splitProtocolAddressOnComma m
