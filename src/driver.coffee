@@ -59,10 +59,11 @@ writeMessageToAcMessage = (writeMessage) ->
   if writeMessage.data.type is 'dimmable'
     return writeMessageToDimmerMessage(writeMessage)
 
+"1,2/2000"
 writeMessageToMotorMessages = (writeMessage) ->
-  addrTime = writeMessage.data.protocolAddress.split("/")
+  [ addresses, delay ] = writeMessage.data.protocolAddress.split("/")
   cloneMessage = _.cloneDeep writeMessage
-  cloneMessage.data.protocolAddress = addrTime[0]
+  cloneMessage.data.protocolAddress = addresses
   commands = splitProtocolAddressOnComma cloneMessage
   delayedCmd = if writeMessage.data.on then _.cloneDeep commands[0] else _.cloneDeep commands[1]
   commands[1].data.on = !writeMessage.data.on
@@ -71,7 +72,7 @@ writeMessageToMotorMessages = (writeMessage) ->
     on: commands[0],
     off: commands[1],
     delayed: delayedCmd,
-    delay: parseInt(addrTime[1])
+    delay: parseInt delay
   }
 
 messagesToMotorStream = (messages) ->
