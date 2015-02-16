@@ -61,23 +61,23 @@ writeMessageToAcMessage = (writeMessage) ->
 
 writeMessageToMotorMessages = (writeMessage) ->
   addrTime = writeMessage.data.protocolAddress.split("/")
-  writeMessage.data.protocolAddress = addrTime[0]
-  commands = splitProtocolAddressOnComma writeMessage
-  time = parseInt(addrTime[1])
-  if writeMessage.data.on is true
-    delayedCmd = _.cloneDeep commands[0]
-    delayedCmd.data.on = false
-    commands[1].data.on = false
-    Bacon.once(writeMessageToRelayMessage commands[0])
-      .concat(Bacon.once(writeMessageToRelayMessage commands[1]))
-      .concat(Bacon.later(time, writeMessageToRelayMessage(delayedCmd)))
-  else
-    delayedCmd = _.cloneDeep commands[1]
-    delayedCmd.data.on = false
-    commands[1].data.on = true
-    Bacon.once(writeMessageToRelayMessage commands[1])
-      .concat(Bacon.once(writeMessageToRelayMessage commands[0]))
-      .concat(Bacon.later(time, writeMessageToRelayMessage(delayedCmd)))
+  cloneMessage = _.cloneDeep writeMessage
+  cloneMessage.data.protocolAddress = addrTime[0]
+  commands = splitProtocolAddressOnComma cloneMessage
+  delayedCmd = if writeMessage.data.on then _.cloneDeep commands[0] else _.cloneDeep commands[1]
+  commands[1].data.on = !writeMessage.data.on
+  delayedCmd.data.on = false
+  {
+    on: commands[0],
+    off: commands[1],
+    delayed: delayedCmd,
+    delay: parseInt(addrTime[1])
+  }
+
+messagesToMotorStream = (messages) ->
+  Bacon.once(writeMessageToRelayMessage messages.onMessage)
+    .concat(Bacon.once(writeMessageToRelayMessage messages.offMessage))
+    .concat(Bacon.later(messages.delay, writeMessageToRelayMessage(messages.delayedMessage)))
 
 writeMessageToRelayMessage = (writeMessage) ->
   if writeMessage.data.on is true then onOff = 1 else onOff = 0
@@ -160,7 +160,10 @@ async.series openStreams, (err, [daliWriteMessages, dmxWriteMessages, acWriteMes
     .map writeMessageToAcMessage
     .onValue doWriteToAds
   motorWriteMessages
-    .flatMapLatest (m) -> writeMessageToMotorMessages m
+    .flatMapLatest (m) ->
+      motorMsgs = writeMessageToMotorMessages m
+      Bacon.fromArray([motorMsgs.on, motorMsgs.off]).concat(Bacon.later(motorMsgs.delay, motorMsgs.delayed))
+    .map writeMessageToRelayMessage
     .onValue doWriteToAds
   bridgeDaliSocket.write (JSON.stringify { command: "driverReady", protocol: "beckhoff/dali"}) + "\n"
   bridgeDmxSocket.write (JSON.stringify { command: "driverReady", protocol: "beckhoff/dmx"}) + "\n"
