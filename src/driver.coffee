@@ -59,7 +59,6 @@ writeMessageToAcMessage = (writeMessage) ->
   if writeMessage.data.type is 'dimmable'
     return writeMessageToDimmerMessage(writeMessage)
 
-"1,2/2000"
 writeMessageToMotorMessages = (writeMessage) ->
   [ addresses, delay ] = writeMessage.data.protocolAddress.split("/")
   cloneMessage = _.cloneDeep writeMessage
