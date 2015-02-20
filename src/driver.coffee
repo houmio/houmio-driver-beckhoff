@@ -38,9 +38,6 @@ adsClient = null
 doWriteToAds = (handle) ->
   adsClient.write handle, (err) ->
     if err then exit "Error while writing to ADS: #{err}"
-
-doWriteMotorToAds = (data) ->
-  doWriteToAds data.handle
 # ADS messages
 
 ## DALI functions
@@ -75,13 +72,6 @@ writeMessageToMotorMessages = (writeMessage) ->
     off: offRelayWriteMessage,
     delayed: delayedRelayWriteMessage,
     delay: parseInt delay
-  }
-
-writeMessageToMotorAdsMessage = (writeMessage) ->
-  handle = writeMessageToAcMessage writeMessage
-  {
-    id: writeMessage.data._id
-    handle: handle
   }
 
 writeMessageToRelayMessage = (writeMessage) ->
@@ -173,7 +163,6 @@ async.series openStreams, (err, [daliWriteMessages, dmxWriteMessages, acWriteMes
     .flatMap (m) -> Bacon.fromArray splitProtocolAddressOnComma m
     .map writeMessageToAcMessage
     .onValue doWriteToAds
-
   motorWriteMessages
     .groupBy (m) -> m.data._id
     .subscribe (s) ->
@@ -183,9 +172,9 @@ async.series openStreams, (err, [daliWriteMessages, dmxWriteMessages, acWriteMes
         delayedObservable = Rx.Observable.return(motorMessages.delayed)
           .delay motorMessages.delay
         Rx.Observable.return(motorMessages.on).concat(offObservable, delayedObservable)
-      .map writeMessageToMotorAdsMessage
+      .map writeMessageToAcMessage
       .subscribe (m) ->
-        doWriteMotorToAds m
+        doWriteToAds m
 
   bridgeDaliSocket.write (JSON.stringify { command: "driverReady", protocol: "beckhoff/dali"}) + "\n"
   bridgeDmxSocket.write (JSON.stringify { command: "driverReady", protocol: "beckhoff/dmx"}) + "\n"
