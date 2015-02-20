@@ -175,17 +175,17 @@ async.series openStreams, (err, [daliWriteMessages, dmxWriteMessages, acWriteMes
     .onValue doWriteToAds
 
   motorWriteMessages
-    .flatMapLatest (m) ->
-      motorMessages = writeMessageToMotorMessages m
-      offObservable = Rx.Observable.return(motorMessages.off)
-      delayedObservable = Rx.Observable.return(motorMessages.delayed)
-        .delay motorMessages.delay
-      Rx.Observable.return(motorMessages.on).concat( offObservable, delayedObservable)
-    .map writeMessageToMotorAdsMessage
-    .groupBy (data) -> data.id
-    .subscribe (m) ->
-      m.subscribe (mes) ->
-        doWriteMotorToAds message
+    .groupBy (m) -> m.data._id
+    .subscribe (s) ->
+      s.flatMapLatest (m) ->
+        motorMessages = writeMessageToMotorMessages m
+        offObservable = Rx.Observable.return(motorMessages.off)
+        delayedObservable = Rx.Observable.return(motorMessages.delayed)
+          .delay motorMessages.delay
+        Rx.Observable.return(motorMessages.on).concat(offObservable, delayedObservable)
+      .map writeMessageToMotorAdsMessage
+      .subscribe (m) ->
+        doWriteMotorToAds m
 
   bridgeDaliSocket.write (JSON.stringify { command: "driverReady", protocol: "beckhoff/dali"}) + "\n"
   bridgeDmxSocket.write (JSON.stringify { command: "driverReady", protocol: "beckhoff/dmx"}) + "\n"
