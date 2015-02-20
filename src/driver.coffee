@@ -6,6 +6,7 @@ ads = require('ads')
 async = require('async')
 _ = require('lodash')
 cc = require('./colourConversion')
+Rx = require('rx')
 
 exit = (msg) ->
   console.log msg
@@ -38,6 +39,8 @@ doWriteToAds = (handle) ->
   adsClient.write handle, (err) ->
     if err then exit "Error while writing to ADS: #{err}"
 
+doWriteMotorToAds = (data) ->
+  doWriteToAds data.handle
 # ADS messages
 
 ## DALI functions
@@ -72,6 +75,13 @@ writeMessageToMotorMessages = (writeMessage) ->
     off: offRelayWriteMessage,
     delayed: delayedRelayWriteMessage,
     delay: parseInt delay
+  }
+
+writeMessageToMotorAdsMessage = (writeMessage) ->
+  handle = writeMessageToAcMessage writeMessage
+  {
+    id: writeMessage.data._id
+    handle: handle
   }
 
 writeMessageToRelayMessage = (writeMessage) ->
@@ -126,6 +136,14 @@ toLines = (socket) ->
     socket.on "error", (err) -> sink new Bacon.Error(err)
     ( -> )
 
+openBridgeWriteMotorMessageStream = (socket, protocolName) -> (cb) ->
+  socket.connect houmioBridge.split(":")[1], houmioBridge.split(":")[0], ->
+    lineStream = Rx.Observable.fromEvent socket, "data"
+    messageStream = lineStream.map JSON.parse
+    writeMessageStream = messageStream.filter isWriteMessage
+    cb null, writeMessageStream
+
+
 openBridgeWriteMessageStream = (socket, protocolName) -> (cb) ->
   socket.connect houmioBridge.split(":")[1], houmioBridge.split(":")[0], ->
     lineStream = toLines socket
@@ -138,7 +156,7 @@ openBridgeWriteMessageStream = (socket, protocolName) -> (cb) ->
 openStreams = [ openBridgeWriteMessageStream(bridgeDaliSocket, "DALI")
               , openBridgeWriteMessageStream(bridgeDmxSocket, "DMX")
               , openBridgeWriteMessageStream(bridgeAcSocket, "AC")
-              , openBridgeWriteMessageStream(bridgeMotorSocket, "MOTOR") ]
+              , openBridgeWriteMotorMessageStream(bridgeMotorSocket, "MOTOR") ]
 
 async.series openStreams, (err, [daliWriteMessages, dmxWriteMessages, acWriteMessages, motorWriteMessages]) ->
   if err then exit err
@@ -155,12 +173,20 @@ async.series openStreams, (err, [daliWriteMessages, dmxWriteMessages, acWriteMes
     .flatMap (m) -> Bacon.fromArray splitProtocolAddressOnComma m
     .map writeMessageToAcMessage
     .onValue doWriteToAds
+
   motorWriteMessages
     .flatMapLatest (m) ->
       motorMessages = writeMessageToMotorMessages m
-      Bacon.fromArray([motorMessages.on, motorMessages.off]).concat(Bacon.later(motorMessages.delay, motorMessages.delayed))
-    .map writeMessageToRelayMessage
-    .onValue doWriteToAds
+      offObservable = Rx.Observable.return(motorMessages.off)
+      delayedObservable = Rx.Observable.return(motorMessages.delayed)
+        .delay motorMessages.delay
+      Rx.Observable.return(motorMessages.on).concat( offObservable, delayedObservable)
+    .map writeMessageToMotorAdsMessage
+    .groupBy (data) -> data.id
+    .subscribe (m) ->
+      m.subscribe (mes) ->
+        doWriteMotorToAds message
+
   bridgeDaliSocket.write (JSON.stringify { command: "driverReady", protocol: "beckhoff/dali"}) + "\n"
   bridgeDmxSocket.write (JSON.stringify { command: "driverReady", protocol: "beckhoff/dmx"}) + "\n"
   bridgeAcSocket.write (JSON.stringify { command: "driverReady", protocol: "beckhoff/ac"}) + "\n"
