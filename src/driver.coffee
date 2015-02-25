@@ -128,7 +128,10 @@ toLines = (socket) ->
 
 openBridgeWriteMotorMessageStream = (socket, protocolName) -> (cb) ->
   socket.connect houmioBridge.split(":")[1], houmioBridge.split(":")[0], ->
-    lineStream = Rx.Observable.fromEvent socket, "data"
+    #lineStream = Rx.Observable.fromEvent socket, "data"
+    lineStream = Rx.Observable.create (observer) ->
+      carrier.carry socket, (data) ->
+        observer.onNext data
     messageStream = lineStream.map JSON.parse
     writeMessageStream = messageStream.filter isWriteMessage
     cb null, writeMessageStream
