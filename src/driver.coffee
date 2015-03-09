@@ -67,12 +67,20 @@ writeMessageToMotorMessages = (writeMessage) ->
   delayedRelayWriteMessage = if writeMessage.data.on then _.cloneDeep onRelayWriteMessage else _.cloneDeep offRelayWriteMessage
   offRelayWriteMessage.data.on = !writeMessage.data.on
   delayedRelayWriteMessage.data.on = false
-  {
-    on: onRelayWriteMessage,
-    off: offRelayWriteMessage,
-    delayed: delayedRelayWriteMessage,
-    delay: parseInt delay
-  }
+  if writeMessage.data.on
+    return {
+      on: onRelayWriteMessage,
+      off: offRelayWriteMessage,
+      delayed: delayedRelayWriteMessage,
+      delay: parseInt delay
+    }
+  else
+    return {
+      on: offRelayWriteMessage,
+      off: onRelayWriteMessage,
+      delayed: delayedRelayWriteMessage,
+      delay: parseInt delay
+    }
 
 writeMessageToRelayMessage = (writeMessage) ->
   if writeMessage.data.on is true then onOff = 1 else onOff = 0
@@ -171,10 +179,11 @@ async.series openStreams, (err, [daliWriteMessages, dmxWriteMessages, acWriteMes
     .subscribe (s) ->
       s.flatMapLatest (m) ->
         motorMessages = writeMessageToMotorMessages m
-        offObservable = Rx.Observable.return(motorMessages.off)
+        onObservable = Rx.Observable.return(motorMessages.on)
+          .delay 200
         delayedObservable = Rx.Observable.return(motorMessages.delayed)
           .delay motorMessages.delay
-        Rx.Observable.return(motorMessages.on).concat(offObservable, delayedObservable)
+        Rx.Observable.return(motorMessages.off).concat(onObservable, delayedObservable)
       .map writeMessageToAcMessage
       .subscribe (m) ->
         doWriteToAds m
