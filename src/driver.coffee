@@ -68,19 +68,17 @@ writeMessageToMotorMessages = (writeMessage) ->
   offRelayWriteMessage.data.on = !writeMessage.data.on
   delayedRelayWriteMessage.data.on = false
   if writeMessage.data.on
-    return {
-      on: onRelayWriteMessage,
-      off: offRelayWriteMessage,
-      delayed: delayedRelayWriteMessage,
-      delay: parseInt delay
-    }
+    onMessage = onRelayWriteMessage
+    offMessage = offRelayWriteMessage
   else
-    return {
-      on: offRelayWriteMessage,
-      off: onRelayWriteMessage,
-      delayed: delayedRelayWriteMessage,
-      delay: parseInt delay
-    }
+    onMessage = offRelayWriteMessage
+    offMessage = onRelayWriteMessage
+  {
+    on: onMessage,
+    off: offMessage,
+    delayed: delayedRelayWriteMessage,
+    delay: parseInt delay
+  }
 
 writeMessageToRelayMessage = (writeMessage) ->
   if writeMessage.data.on is true then onOff = 1 else onOff = 0
