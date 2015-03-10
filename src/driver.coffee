@@ -45,7 +45,7 @@ doWriteToAds = (handle) ->
 writeMessageToDaliMessage = (writeMessage) ->
   v = if writeMessage.data.bri is 255 then 254 else writeMessage.data.bri
   {
-    symname: ".HMI_LightControls[#{writeMessage.data.protocolAddress}]",
+    symname: ".HMI_DaliControls#{writeMessage.data.groupAddress}[#{writeMessage.data.protocolAddress}]",
     bytelength: 2,
     propname: 'value',
     value: new Buffer [0x01, v]
@@ -156,10 +156,17 @@ openStreams = [ openBridgeWriteMessageStream(bridgeDaliSocket, "DALI")
               , openBridgeWriteMessageStream(bridgeAcSocket, "AC")
               , openBridgeWriteMotorMessageStream(bridgeMotorSocket, "MOTOR") ]
 
+
+
+splitGroupAddressOnDash = (writeMessage) ->
+  writeMessage.data.groupAddress = writeMessage.data.protocolAddress.split('/')[0]
+  writeMessage.data.protocolAddress = writeMessage.data .protocolAddress.split('/')[1]
+  writeMessage
+
 async.series openStreams, (err, [daliWriteMessages, dmxWriteMessages, acWriteMessages, motorWriteMessages]) ->
   if err then exit err
   daliWriteMessages
-    .flatMap (m) -> Bacon.fromArray splitProtocolAddressOnComma m
+    .flatMap (m) -> Bacon.fromArray splitProtocolAddressOnComma (splitGroupAddressOnDash m)
     .map writeMessageToDaliMessage
     .bufferingThrottle houmioBeckhoffDaliThrottle
     .onValue doWriteToAds
