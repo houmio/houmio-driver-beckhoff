@@ -89,29 +89,29 @@ writeMessageToRelayMessage = (writeMessage) ->
   }
 
 writeMessageToDimmerMessage = (writeMessage) ->
+  brightness = (writeMessage.data.bri / 0xFF) * 0x7FFF
   {
     symname: ".HMI_DimmerControls[#{writeMessage.data.protocolAddress}]"
     bytelength: ads.INT,
-    value: writeMessage.data.bri
+    value: brightness
   }
 
 ## DMX functions
+dmxAddressAndValueToAdsHandle = (address, groupAddress,value) ->
+  {
+    symname: ".HMI_DmxProcData#{groupAddress}[#{address}]"
+    bytelength: ads.BYTE
+    propname: 'value'
+    value: value
+  }
 
 writeMessageToDmxMessages = (writeMessage) ->
   if writeMessage.data.type is 'color'
     rgbw = cc.hsvToRgbw writeMessage.data.hue, writeMessage.data.saturation, writeMessage.data.bri
     address = parseInt writeMessage.data.protocolAddress
-    _.map rgbw, (channelValue, i) -> dmxAddressAndValueToAdsHandle(address + i, channelValue)
+    _.map rgbw, (channelValue, i) -> dmxAddressAndValueToAdsHandle(address + i, writeMessage.data.groupAddress, channelValue)
   else
-    [ dmxAddressAndValueToAdsHandle(writeMessage.data.protocolAddress, writeMessage.data.bri)]
-
-dmxAddressAndValueToAdsHandle = (address, value) ->
-  {
-    symname: ".HMI_DMXPROCDATA[#{address}]"
-    bytelength: ads.BYTE
-    propname: 'value'
-    value: value
-  }
+    [ dmxAddressAndValueToAdsHandle(writeMessage.data.protocolAddress, writeMessage.data.groupAddress, writeMessage.data.bri)]
 
 # Helpers
 
@@ -120,6 +120,11 @@ splitProtocolAddressOnComma = (writeMessage) ->
     writeMessageForSingleAddress = _.cloneDeep writeMessage
     writeMessageForSingleAddress.data.protocolAddress = singleAddress
     writeMessageForSingleAddress
+
+splitGroupAddressOnDash = (writeMessage) ->
+  writeMessage.data.groupAddress = writeMessage.data.protocolAddress.split('/')[0]
+  writeMessage.data.protocolAddress = writeMessage.data .protocolAddress.split('/')[1]
+  writeMessage
 
 # Bridge sockets
 
@@ -156,13 +161,6 @@ openStreams = [ openBridgeWriteMessageStream(bridgeDaliSocket, "DALI")
               , openBridgeWriteMessageStream(bridgeAcSocket, "AC")
               , openBridgeWriteMotorMessageStream(bridgeMotorSocket, "MOTOR") ]
 
-
-
-splitGroupAddressOnDash = (writeMessage) ->
-  writeMessage.data.groupAddress = writeMessage.data.protocolAddress.split('/')[0]
-  writeMessage.data.protocolAddress = writeMessage.data .protocolAddress.split('/')[1]
-  writeMessage
-
 async.series openStreams, (err, [daliWriteMessages, dmxWriteMessages, acWriteMessages, motorWriteMessages]) ->
   if err then exit err
   daliWriteMessages
@@ -171,7 +169,7 @@ async.series openStreams, (err, [daliWriteMessages, dmxWriteMessages, acWriteMes
     .bufferingThrottle houmioBeckhoffDaliThrottle
     .onValue doWriteToAds
   dmxWriteMessages
-    .flatMap (m) -> Bacon.fromArray splitProtocolAddressOnComma m
+    .flatMap (m) -> Bacon.fromArray splitProtocolAddressOnComma (splitGroupAddressOnDash m)
     .flatMap (m) -> Bacon.fromArray writeMessageToDmxMessages m
     .onValue doWriteToAds
   acWriteMessages
