@@ -30,6 +30,7 @@ bridgeDaliSocket = new net.Socket()
 bridgeDmxSocket = new net.Socket()
 bridgeAcSocket = new net.Socket()
 bridgeMotorSocket = new net.Socket()
+bridgeWinchSocket = new net.Socket()
 
 adsClient = null
 
@@ -89,7 +90,7 @@ writeMessageToRelayMessage = (writeMessage) ->
   }
 
 writeMessageToDimmerMessage = (writeMessage) ->
-  brightness = (writeMessage.data.bri / 0xFF) * 0x7FFF
+  brightness = Math.floor (writeMessage.data.bri / 0xFF) * 0x7FFF
   {
     symname: ".HMI_DimmerControls[#{writeMessage.data.protocolAddress}]"
     bytelength: ads.INT,
@@ -112,6 +113,22 @@ writeMessageToDmxMessages = (writeMessage) ->
     _.map rgbw, (channelValue, i) -> dmxAddressAndValueToAdsHandle(address + i, writeMessage.data.groupAddress, channelValue)
   else
     [ dmxAddressAndValueToAdsHandle(writeMessage.data.protocolAddress, writeMessage.data.groupAddress, writeMessage.data.bri)]
+# Winch functions
+
+parseWinchParamsFromWriteMessage = (writeMessage) ->
+  writeMessage.data.groupAddress = writeMessage.data.protocolAddress.split('/')[0]
+  writeMessage.data.speed = writeMessage.data.protocolAddress.split('/')[2]
+  writeMessage.data.maxPos = writeMessage.data.protocolAddress.split('/')[3]
+  writeMessage.data.minPos = writeMessage.data.protocolAddress.split('/')[4]
+  writeMessage.data.protocolAddress = writeMessage.data.protocolAddress.split('/')[1]
+  writeMessage.data.position = writeMessage.data.bri
+  writeMessage
+
+writeMessageToWinchMessages = (writeMessage) ->
+  [dmxAddressAndValueToAdsHandle(parseInt(writeMessage.data.protocolAddress)+2, writeMessage.data.groupAddress, writeMessage.data.speed),
+    dmxAddressAndValueToAdsHandle(parseInt(writeMessage.data.protocolAddress)+3, writeMessage.data.groupAddress, writeMessage.data.maxPos),
+    dmxAddressAndValueToAdsHandle(parseInt(writeMessage.data.protocolAddress)+4, writeMessage.data.groupAddress, writeMessage.data.minPos),
+    dmxAddressAndValueToAdsHandle(writeMessage.data.protocolAddress, writeMessage.data.groupAddress, writeMessage.data.position),]
 
 # Helpers
 
@@ -159,9 +176,10 @@ openBridgeWriteMessageStream = (socket, protocolName) -> (cb) ->
 openStreams = [ openBridgeWriteMessageStream(bridgeDaliSocket, "DALI")
               , openBridgeWriteMessageStream(bridgeDmxSocket, "DMX")
               , openBridgeWriteMessageStream(bridgeAcSocket, "AC")
-              , openBridgeWriteMotorMessageStream(bridgeMotorSocket, "MOTOR") ]
+              , openBridgeWriteMotorMessageStream(bridgeMotorSocket, "MOTOR")
+              , openBridgeWriteMessageStream(bridgeWinchSocket, "WINCH")]
 
-async.series openStreams, (err, [daliWriteMessages, dmxWriteMessages, acWriteMessages, motorWriteMessages]) ->
+async.series openStreams, (err, [daliWriteMessages, dmxWriteMessages, acWriteMessages, motorWriteMessages, winchWriteMessages]) ->
   if err then exit err
   daliWriteMessages
     .flatMap (m) -> Bacon.fromArray splitProtocolAddressOnComma (splitGroupAddressOnDash m)
@@ -175,6 +193,10 @@ async.series openStreams, (err, [daliWriteMessages, dmxWriteMessages, acWriteMes
   acWriteMessages
     .flatMap (m) -> Bacon.fromArray splitProtocolAddressOnComma m
     .map writeMessageToAcMessage
+    .onValue doWriteToAds
+  winchWriteMessages
+    .flatMap (m) -> Bacon.fromArray splitProtocolAddressOnComma (parseWinchParamsFromWriteMessage m)
+    .flatMap (m) -> Bacon.fromArray writeMessageToWinchMessages m
     .onValue doWriteToAds
   motorWriteMessages
     .groupBy (m) -> m.data._id
@@ -194,6 +216,7 @@ async.series openStreams, (err, [daliWriteMessages, dmxWriteMessages, acWriteMes
   bridgeDmxSocket.write (JSON.stringify { command: "driverReady", protocol: "beckhoff/dmx"}) + "\n"
   bridgeAcSocket.write (JSON.stringify { command: "driverReady", protocol: "beckhoff/ac"}) + "\n"
   bridgeMotorSocket.write (JSON.stringify { command: "driverReady", protocol: "beckhoff/motor"}) + "\n"
+  bridgeWinchSocket.write (JSON.stringify { command: "driverReady", protocol: "beckhoff/winch"}) + "\n"
 
 # ADS client
 
