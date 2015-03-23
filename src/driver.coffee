@@ -115,20 +115,52 @@ writeMessageToDmxMessages = (writeMessage) ->
     [ dmxAddressAndValueToAdsHandle(writeMessage.data.protocolAddress, writeMessage.data.groupAddress, writeMessage.data.bri)]
 # Winch functions
 
+putWinchParamsToWriteMessage = (posRough, posFine, speed, maxPosTop, maxPosBottom, findUp, findDown) ->
+  writeMessage.data.speed = 0
+  writeMessage.data.maxPos = 0
+  writeMessage.data.minPos = 0
+  writeMessage.data.position = 0
+
+
+calculateWinchPosition = (writeMessage) ->
+  top = 255 - writeMessage.data.maxPos
+  bottom = writeMessage.data.minPos
+  length = top - bottom
+  Math.floor(length/255*(255-writeMessage.data.bri)) + bottom
+
 parseWinchParamsFromWriteMessage = (writeMessage) ->
   writeMessage.data.groupAddress = writeMessage.data.protocolAddress.split('/')[0]
-  writeMessage.data.speed = writeMessage.data.protocolAddress.split('/')[2]
-  writeMessage.data.maxPos = writeMessage.data.protocolAddress.split('/')[3]
-  writeMessage.data.minPos = writeMessage.data.protocolAddress.split('/')[4]
+  writeMessage.data.speed = parseInt writeMessage.data.protocolAddress.split('/')[2]
+  writeMessage.data.maxPos = parseInt writeMessage.data.protocolAddress.split('/')[3]
+  writeMessage.data.minPos = parseInt writeMessage.data.protocolAddress.split('/')[4]
+  writeMessage.data.position = calculateWinchPosition writeMessage
   writeMessage.data.protocolAddress = writeMessage.data.protocolAddress.split('/')[1]
-  writeMessage.data.position = writeMessage.data.bri
+  writeMessage.data.findDown = 0
+  writeMessage.data.finePosition = 0
+  writeMessage.data.findUp = 0
+  if writeMessage.data.type is 'binary'
+    writeMessage.data.position = 0
+    writeMessage.data.speed = 0
+    writeMessage.data.maxPos = 0
+    writeMessage.data.minPos = 0
+    if writeMessage.data.on then writeMessage.data.findUp = 100 else writeMessage.data.findUp = 0
   writeMessage
 
 writeMessageToWinchMessages = (writeMessage) ->
-  [dmxAddressAndValueToAdsHandle(parseInt(writeMessage.data.protocolAddress)+2, writeMessage.data.groupAddress, writeMessage.data.speed),
-    dmxAddressAndValueToAdsHandle(parseInt(writeMessage.data.protocolAddress)+3, writeMessage.data.groupAddress, writeMessage.data.maxPos),
-    dmxAddressAndValueToAdsHandle(parseInt(writeMessage.data.protocolAddress)+4, writeMessage.data.groupAddress, writeMessage.data.minPos),
-    dmxAddressAndValueToAdsHandle(writeMessage.data.protocolAddress, writeMessage.data.groupAddress, writeMessage.data.position),]
+  positionAddress = parseInt(writeMessage.data.protocolAddress)
+  finePositionAddress = positionAddress+1
+  speedAddress = positionAddress+2
+  topPositionAddress = positionAddress+3
+  bottomPositionAddress = positionAddress+4
+  findUpAddress = positionAddress+5
+  findDownAddress = positionAddress+6
+  [dmxAddressAndValueToAdsHandle(speedAddress, writeMessage.data.groupAddress, writeMessage.data.speed),
+    dmxAddressAndValueToAdsHandle(finePositionAddress, writeMessage.data.groupAddress, writeMessage.data.finePosition),
+    dmxAddressAndValueToAdsHandle(topPositionAddress, writeMessage.data.groupAddress, writeMessage.data.maxPos),
+    dmxAddressAndValueToAdsHandle(bottomPositionAddress, writeMessage.data.groupAddress, writeMessage.data.minPos),
+    dmxAddressAndValueToAdsHandle(positionAddress, writeMessage.data.groupAddress, writeMessage.data.position),
+    dmxAddressAndValueToAdsHandle(findUpAddress, writeMessage.data.groupAddress, writeMessage.data.findUp),
+    dmxAddressAndValueToAdsHandle(findDownAddress, writeMessage.data.groupAddress, writeMessage.data.findDown)]
 
 # Helpers
 
