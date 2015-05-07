@@ -43,10 +43,17 @@ doWriteToAds = (handle) ->
 
 ## DALI functions
 
+symname = (universeAddress, protocolAddress) ->
+  if /^g/.test protocolAddress
+    groupAddress = protocolAddress.substring 1
+    ".HMI_DaliGroupControls#{universeAddress}[#{groupAddress}]"
+  else
+    ".HMI_DaliControls#{universeAddress}[#{protocolAddress}]"
+
 writeMessageToDaliMessage = (writeMessage) ->
   v = if writeMessage.data.bri is 255 then 254 else writeMessage.data.bri
   {
-    symname: ".HMI_DaliControls#{writeMessage.data.universeAddress}[#{writeMessage.data.protocolAddress}]",
+    symname: symname(writeMessage.data.universeAddress, writeMessage.data.protocolAddress),
     bytelength: 2,
     propname: 'value',
     value: new Buffer [0x01, v]
