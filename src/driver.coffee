@@ -46,7 +46,7 @@ doWriteToAds = (handle) ->
 writeMessageToDaliMessage = (writeMessage) ->
   v = if writeMessage.data.bri is 255 then 254 else writeMessage.data.bri
   {
-    symname: ".HMI_DaliControls#{writeMessage.data.groupAddress}[#{writeMessage.data.protocolAddress}]",
+    symname: ".HMI_DaliControls#{writeMessage.data.universeAddress}[#{writeMessage.data.protocolAddress}]",
     bytelength: 2,
     propname: 'value',
     value: new Buffer [0x01, v]
@@ -98,9 +98,9 @@ writeMessageToDimmerMessage = (writeMessage) ->
   }
 
 ## DMX functions
-dmxAddressAndValueToAdsHandle = (address, groupAddress,value) ->
+dmxAddressAndValueToAdsHandle = (address, universeAddress,value) ->
   {
-    symname: ".HMI_DmxProcData#{groupAddress}[#{address}]"
+    symname: ".HMI_DmxProcData#{universeAddress}[#{address}]"
     bytelength: ads.BYTE
     propname: 'value'
     value: value
@@ -110,9 +110,9 @@ writeMessageToDmxMessages = (writeMessage) ->
   if writeMessage.data.type is 'color'
     rgbw = cc.hsvToRgbw writeMessage.data.hue, writeMessage.data.saturation, writeMessage.data.bri
     address = parseInt writeMessage.data.protocolAddress
-    _.map rgbw, (channelValue, i) -> dmxAddressAndValueToAdsHandle(address + i, writeMessage.data.groupAddress, channelValue)
+    _.map rgbw, (channelValue, i) -> dmxAddressAndValueToAdsHandle(address + i, writeMessage.data.universeAddress, channelValue)
   else
-    [ dmxAddressAndValueToAdsHandle(writeMessage.data.protocolAddress, writeMessage.data.groupAddress, writeMessage.data.bri)]
+    [ dmxAddressAndValueToAdsHandle(writeMessage.data.protocolAddress, writeMessage.data.universeAddress, writeMessage.data.bri)]
 # Winch functions
 
 putWinchParamsToWriteMessage = (posRough, posFine, speed, maxPosTop, maxPosBottom, findUp, findDown) ->
@@ -129,7 +129,7 @@ calculateWinchPosition = (writeMessage) ->
   Math.floor(length/255*(255-writeMessage.data.bri)) + bottom
 
 parseWinchParamsFromWriteMessage = (writeMessage) ->
-  writeMessage.data.groupAddress = writeMessage.data.protocolAddress.split('/')[0]
+  writeMessage.data.universeAddress = writeMessage.data.protocolAddress.split('/')[0]
   writeMessage.data.speed = parseInt writeMessage.data.protocolAddress.split('/')[2]
   writeMessage.data.maxPos = parseInt writeMessage.data.protocolAddress.split('/')[3]
   writeMessage.data.minPos = parseInt writeMessage.data.protocolAddress.split('/')[4]
@@ -154,13 +154,13 @@ writeMessageToWinchMessages = (writeMessage) ->
   bottomPositionAddress = positionAddress+4
   findUpAddress = positionAddress+5
   findDownAddress = positionAddress+6
-  [dmxAddressAndValueToAdsHandle(speedAddress, writeMessage.data.groupAddress, writeMessage.data.speed),
-    dmxAddressAndValueToAdsHandle(finePositionAddress, writeMessage.data.groupAddress, writeMessage.data.finePosition),
-    dmxAddressAndValueToAdsHandle(topPositionAddress, writeMessage.data.groupAddress, writeMessage.data.maxPos),
-    dmxAddressAndValueToAdsHandle(bottomPositionAddress, writeMessage.data.groupAddress, writeMessage.data.minPos),
-    dmxAddressAndValueToAdsHandle(positionAddress, writeMessage.data.groupAddress, writeMessage.data.position),
-    dmxAddressAndValueToAdsHandle(findUpAddress, writeMessage.data.groupAddress, writeMessage.data.findUp),
-    dmxAddressAndValueToAdsHandle(findDownAddress, writeMessage.data.groupAddress, writeMessage.data.findDown)]
+  [dmxAddressAndValueToAdsHandle(speedAddress, writeMessage.data.universeAddress, writeMessage.data.speed),
+    dmxAddressAndValueToAdsHandle(finePositionAddress, writeMessage.data.universeAddress, writeMessage.data.finePosition),
+    dmxAddressAndValueToAdsHandle(topPositionAddress, writeMessage.data.universeAddress, writeMessage.data.maxPos),
+    dmxAddressAndValueToAdsHandle(bottomPositionAddress, writeMessage.data.universeAddress, writeMessage.data.minPos),
+    dmxAddressAndValueToAdsHandle(positionAddress, writeMessage.data.universeAddress, writeMessage.data.position),
+    dmxAddressAndValueToAdsHandle(findUpAddress, writeMessage.data.universeAddress, writeMessage.data.findUp),
+    dmxAddressAndValueToAdsHandle(findDownAddress, writeMessage.data.universeAddress, writeMessage.data.findDown)]
 
 # Helpers
 
@@ -170,9 +170,9 @@ splitProtocolAddressOnComma = (writeMessage) ->
     writeMessageForSingleAddress.data.protocolAddress = singleAddress
     writeMessageForSingleAddress
 
-splitGroupAddressOnDash = (writeMessage) ->
-  writeMessage.data.groupAddress = writeMessage.data.protocolAddress.split('/')[0]
-  writeMessage.data.protocolAddress = writeMessage.data .protocolAddress.split('/')[1]
+splitUniverseAddressOnDash = (writeMessage) ->
+  writeMessage.data.universeAddress = writeMessage.data.protocolAddress.split('/')[0]
+  writeMessage.data.protocolAddress = writeMessage.data.protocolAddress.split('/')[1]
   writeMessage
 
 # Bridge sockets
@@ -214,12 +214,12 @@ openStreams = [ openBridgeWriteMessageStream(bridgeDaliSocket, "DALI")
 async.series openStreams, (err, [daliWriteMessages, dmxWriteMessages, acWriteMessages, motorWriteMessages, winchWriteMessages]) ->
   if err then exit err
   daliWriteMessages
-    .flatMap (m) -> Bacon.fromArray splitProtocolAddressOnComma (splitGroupAddressOnDash m)
+    .flatMap (m) -> Bacon.fromArray splitProtocolAddressOnComma (splitUniverseAddressOnDash m)
     .map writeMessageToDaliMessage
     .bufferingThrottle houmioBeckhoffDaliThrottle
     .onValue doWriteToAds
   dmxWriteMessages
-    .flatMap (m) -> Bacon.fromArray splitProtocolAddressOnComma (splitGroupAddressOnDash m)
+    .flatMap (m) -> Bacon.fromArray splitProtocolAddressOnComma (splitUniverseAddressOnDash m)
     .flatMap (m) -> Bacon.fromArray writeMessageToDmxMessages m
     .onValue doWriteToAds
   acWriteMessages
