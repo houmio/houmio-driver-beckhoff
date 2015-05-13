@@ -1,6 +1,7 @@
 _ = require('lodash')
 
 hsvToRgbw = (hue, saturation, value) ->
+  w = ((255 - saturation) * value) / (255*255)
   hue /= 255
   saturation /= 255
   value /= 255
@@ -10,13 +11,13 @@ hsvToRgbw = (hue, saturation, value) ->
   q = value * (1 - f * saturation)
   t = value * (1 - (1 - f) * saturation)
   switch i % 6
-    when 0 then rgb = [value, t, p]
-    when 1 then rgb = [q, value, p]
-    when 2 then rgb = [p, value, t]
-    when 3 then rgb = [p, q, value]
-    when 4 then rgb = [t, p, value]
-    when 5 then rgb = [value, p, q]
-  _.map rgb, (val) -> Math.floor(val*255)
+    when 0 then rgbw = [value, t, p, w]
+    when 1 then rgbw = [q, value, p, w]
+    when 2 then rgbw = [p, value, t, w]
+    when 3 then rgbw = [p, q, value, w]
+    when 4 then rgbw = [t, p, value, w]
+    when 5 then rgbw = [value, p, q, w]
+  _.map rgbw, (val) -> Math.floor(val*255)
 
 hslToRgbw = (hue, saturation, lightness) ->
   if saturation is 0 then return [0, 0, 0, lightness]
@@ -35,7 +36,7 @@ hslToRgbw = (hue, saturation, lightness) ->
   r = hueToRgb p, q, hue + 1/3
   g = hueToRgb p, q, hue
   b = hueToRgb p, q, hue - 1/3
-  [Math.round(r * 255), Math.round(g * 255), Math.round(b * 255), Math.round(lightness / saturation)]
+  [Math.round(r * 255), Math.round(g * 255), Math.round(b * 255), Math.round((lightness - saturation) * 255)]
 
 exports.hslToRgbw = hslToRgbw
 exports.hsvToRgbw = hsvToRgbw
