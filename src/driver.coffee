@@ -105,7 +105,7 @@ writeMessageToDimmerMessage = (writeMessage) ->
   }
 
 ## DMX functions
-dmxAddressAndValueToAdsHandle = (address, universeAddress,value) ->
+dmxAddressAndValueToAdsHandle = (universeAddress, address, value) ->
   {
     symname: ".HMI_DmxProcData#{universeAddress}[#{address}]"
     bytelength: ads.BYTE
@@ -117,9 +117,9 @@ writeMessageToDmxMessages = (writeMessage) ->
   if writeMessage.data.type is 'color'
     rgbw = cc.hsvToRgbw writeMessage.data.hue, writeMessage.data.saturation, writeMessage.data.bri
     address = parseInt writeMessage.data.protocolAddress
-    _.map rgbw, (channelValue, i) -> dmxAddressAndValueToAdsHandle(address + i, writeMessage.data.universeAddress, channelValue)
+    _.map rgbw, (channelValue, i) -> dmxAddressAndValueToAdsHandle(writeMessage.data.universeAddress, address + i, channelValue)
   else
-    [ dmxAddressAndValueToAdsHandle(writeMessage.data.protocolAddress, writeMessage.data.universeAddress, writeMessage.data.bri)]
+    [ dmxAddressAndValueToAdsHandle( writeMessage.data.universeAddress, writeMessage.data.protocolAddress, writeMessage.data.bri)]
 # Winch functions
 
 putWinchParamsToWriteMessage = (posRough, posFine, speed, maxPosTop, maxPosBottom, findUp, findDown) ->
@@ -154,22 +154,16 @@ parseWinchParamsFromWriteMessage = (writeMessage) ->
   writeMessage
 
 writeMessageToWinchMessages = (writeMessage) ->
-  positionAddress = parseInt(writeMessage.data.protocolAddress)
-  finePositionAddress = positionAddress+1
-  speedAddress = positionAddress+2
-  topPositionAddress = positionAddress+3
-  bottomPositionAddress = positionAddress+4
-  findUpAddress = positionAddress+5
-  findDownAddress = positionAddress+6
-  [dmxAddressAndValueToAdsHandle(speedAddress, writeMessage.data.universeAddress, writeMessage.data.speed),
-    dmxAddressAndValueToAdsHandle(finePositionAddress, writeMessage.data.universeAddress, writeMessage.data.finePosition),
-    dmxAddressAndValueToAdsHandle(topPositionAddress, writeMessage.data.universeAddress, writeMessage.data.maxPos),
-    dmxAddressAndValueToAdsHandle(bottomPositionAddress, writeMessage.data.universeAddress, writeMessage.data.minPos),
-    dmxAddressAndValueToAdsHandle(positionAddress, writeMessage.data.universeAddress, writeMessage.data.position),
-    dmxAddressAndValueToAdsHandle(findUpAddress, writeMessage.data.universeAddress, writeMessage.data.findUp),
-    dmxAddressAndValueToAdsHandle(findDownAddress, writeMessage.data.universeAddress, writeMessage.data.findDown)]
-
-# Helpers
+  positionAddress = parseInt(writeMessage.data.protocolAddress) + 1
+  dmxAddressAndValueToDmxUniverse = _.partial dmxAddressAndValueToAdsHandle, writeMessage.data.universeAddress
+  _.map [writeMessage.data.speed,
+    writeMessage.data.finePosition,
+    writeMessage.data.maxPos,
+    writeMessage.data.minPos,
+    writeMessage.data.position,
+    writeMessage.data.findUp,
+    writeMessage.data.findDown], (data, i) ->
+      dmxAddressAndValueToDmxUniverse positionAddress + i, data
 
 splitProtocolAddressOnComma = (writeMessage) ->
   _.map writeMessage.data.protocolAddress.split(","), (singleAddress) ->
