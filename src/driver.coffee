@@ -147,20 +147,20 @@ parseWinchParamsFromWriteMessage = (writeMessage) ->
   writeMessage.data.findUp = 0
   if writeMessage.data.type is 'binary'
     writeMessage.data.position = 0
-    writeMessage.data.speed = 0
+    writeMessage.data.speed = 30
     writeMessage.data.maxPos = 0
     writeMessage.data.minPos = 0
     if writeMessage.data.on then writeMessage.data.findUp = 100 else writeMessage.data.findUp = 0
   writeMessage
 
 writeMessageToWinchMessages = (writeMessage) ->
-  positionAddress = parseInt(writeMessage.data.protocolAddress) + 1
+  positionAddress = parseInt(writeMessage.data.protocolAddress)
   dmxAddressAndValueToDmxUniverse = _.partial dmxAddressAndValueToAdsHandle, writeMessage.data.universeAddress
-  _.map [writeMessage.data.speed,
+  _.map [writeMessage.data.position,
     writeMessage.data.finePosition,
+    writeMessage.data.speed,
     writeMessage.data.maxPos,
     writeMessage.data.minPos,
-    writeMessage.data.position,
     writeMessage.data.findUp,
     writeMessage.data.findDown], (data, i) ->
       dmxAddressAndValueToDmxUniverse positionAddress + i, data
